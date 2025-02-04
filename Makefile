@@ -1,5 +1,6 @@
 SOURCES = $(shell find . -name '*.c')
-EXECS = $(basename $(notdir $(SOURCES)))
+BUILD_DIR = ./
+EXECS = $(BUILD_DIR)$(basename $(notdir $(SOURCES)))
 
 CC = gcc
 CFLAGS = -Wall -Wextra

@@ -51,6 +51,24 @@ void dm_enable_debug() {
         #define PKG_CHECK_CMD "rpm -q "
     #elif __has_include("/usr/bin/pacman")
         #define PKG_CHECK_CMD "pacman -Q "
+    #elif __has_include("/usr/bin/zypper")
+        #define PKG_CHECK_CMD "zypper se --installed-only "
+    #elif __has_include("/usr/bin/xbps-query")
+        #define PKG_CHECK_CMD "xbps-query -l "
+    #elif __has_include("/usr/bin/nix-env")
+        #define PKG_CHECK_CMD "nix-env -q "
+    #elif __has_include("/usr/bin/flatpak")
+        #define PKG_CHECK_CMD "flatpak list "
+    #elif __has_include("/usr/bin/snap")
+        #define PKG_CHECK_CMD "snap list "
+    #elif __has_include("/usr/bin/emerge")
+        #define PKG_CHECK_CMD "equery list "
+    #elif __has_include("/usr/bin/port")
+        #define PKG_CHECK_CMD "port installed "
+    #elif __has_include("/usr/bin/slackpkg")
+        #define PKG_CHECK_CMD "slackpkg search "
+    #elif __has_include("/usr/bin/guix")
+        #define PKG_CHECK_CMD "guix package -I "
     #else
         #error "No supported package manager found!"
     #endif
@@ -211,7 +229,20 @@ int dm_request_sudo(int argc, char *argv[]) {
 }
 
 
+int dm_execute_command(char *fmt, ...) {
+    char *command = malloc(DM_DEFAULT_SIZE);
+    va_list args;
+    va_start(args, fmt);
+    vsprintf(command, fmt, args);
+    va_end(args);
+
+    if (state.debug) dm_log(DM_INFO, "Executing command \"%s\"\n", command);
+    int return_code = system(command);
+    if (return_code < 0) {
+        return return_code;
+    }
+
+    return -1;
+}
+
 #endif // DEPLOY_H
-
-
-
