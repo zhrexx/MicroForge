@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+
 #define PORT 8080
 #define BUFFER_SIZE 4096
 
@@ -138,7 +139,7 @@ void handle_client(int client_socket) {
             send_response(client_socket, "200 OK", content);
         }
     } else if (strncmp(req.route, "/server_info/", strlen(req.route)) == 0 || strncmp(req.route, "/server_info", strlen(req.route)) == 0) {
-        send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge\">MicroForge/HTTP</a>");
+        send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>");
     } else {
         char file_path[256];
         snprintf(file_path, sizeof(file_path), "%s.html", req.route + 1);  
