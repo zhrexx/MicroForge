@@ -14,7 +14,7 @@
 #define PORT 8080
 #endif
 #define LOG_IP_ENABLED 1
-#define BUFFER_SIZE (6 * 1024 * 1024)
+#define BUFFER_SIZE (1 * 1024 * 1024)
 #define MAX_LINES 1024
 #define MAX_TOKENS 256
 #define MAX_LENGTH 1024
@@ -42,7 +42,6 @@ typedef struct {
     char *host;
     char *body;
     char *extracted_ip;
-    char *content_type;
 } HTTP_Request;
 
 char **blocklist = NULL;
@@ -211,15 +210,14 @@ HTTP_Request parse_http_request(const char *request) {
         result.extracted_ip = strdup("NOTPROVIDED");
     }
 
-    const char *content_type = strstr(request, "Content-Type: ");
-    result.content_type = strdup(content_type);
 
     if (result.method == HM_POST) {
         const char *body = strstr(request, "\r\n\r\n");
         if (body) {
             body += 4;
             result.body = strdup(body);
-            
+
+            const char *content_type = strstr(request, "Content-Type: ");
             if (content_type && strstr(content_type, "application/x-www-form-urlencoded")) {
                 int count = 0;
                 for (const char *p = body; *p; p++) {
