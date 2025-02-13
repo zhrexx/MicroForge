@@ -10,7 +10,9 @@
 #include <time.h>
 #include <ctype.h> 
 
+#ifndef PORT 
 #define PORT 8080
+#endif
 #define LOG_IP_ENABLED 1
 #define BUFFER_SIZE (6 * 1024 * 1024)
 #define MAX_LINES 1024
