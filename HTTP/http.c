@@ -1,398 +1,19 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdarg.h> 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <time.h>
-#include <ctype.h> 
+#include "hapi.h"
 
 #ifndef S_PORT 
 #define S_PORT 8080
 #endif
 #define LOG_IP_ENABLED 1
-#define R_BUFFER_SIZE (1 * 1024 * 1024)
-#define BLOCKLIST_MAX_LINES 1024
-#define BLOCKLIST_MAX_TOKENS 256
-#define BLOCKLIST_MAX_LENGTH 1024
 
-#ifdef SSL_ENABLE
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#endif
+int server_fdG = 0;
 
-typedef enum {
-    HM_GET,
-    HM_POST,
-} HTTP_Method;
-
-typedef struct {
-    char *key;
-    char *value;
-} HTTP_Parameter;
-typedef struct {
-    char *name;
-    char *value;
-} HTTP_Cookie;
-
-typedef struct {
-    HTTP_Cookie *cookies;
-    int cookie_count;
-} HTTP_CookieJar;
-
-typedef struct {
-    HTTP_Method method;
-    char *route;
-    HTTP_Parameter *parameters;
-    int param_count;
-    char *host;
-    char *body;
-    char *extracted_ip;
-    HTTP_CookieJar cookie_jar;
-} HTTP_Request;
-
-char **blocklist = NULL;
-int block_count = 0;
-
-int load_blocklist(const char *filename) {
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        perror("Error opening file");
-        return -1;
+void handle_signal(int sig) {
+    (void) sig;
+    if (close(server_fdG) < 0) {
+        fprintf(stderr, "ERROR: Could not close server socket!\n");
     }
-
-    blocklist = malloc(BLOCKLIST_MAX_LINES * sizeof(char *));
-    if (!blocklist) {
-        perror("Memory allocation failed");
-        fclose(file);
-        return -1;
-    }
-
-    char buffer[BLOCKLIST_MAX_LENGTH];
-    while (fgets(buffer, sizeof(buffer), file) && block_count < BLOCKLIST_MAX_LINES) {
-        buffer[strcspn(buffer, "\n")] = 0;
-
-        char *token = strtok(buffer, " ");
-        while (token && block_count < BLOCKLIST_MAX_LINES) {
-            blocklist[block_count] = strdup(token);
-            if (!blocklist[block_count]) {
-                perror("Memory allocation failed");
-                fclose(file);
-                return -1;
-            }
-            block_count++;
-            token = strtok(NULL, " ");
-        }
-    }
-
-    fclose(file);
-    return block_count;
-}
-
-void free_blocklist() {
-    for (int i = 0; i < block_count; i++) {
-        free(blocklist[i]);
-    }
-    free(blocklist);
-}
-
-void log_msg(const char *prefix, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    printf("[%s] ", prefix);
-    vprintf(format, args);
-    va_end(args);
-}
-
-#ifdef SSL_ENABLE
-void init_ssl() {
-    SSL_load_error_strings();
-    OpenSSL_add_ssl_algorithms();
-}
-
-SSL_CTX *create_ssl_context() {
-    SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
-    if (!ctx) {
-        perror("Unable to create SSL context");
-        exit(EXIT_FAILURE);
-    }
-    return ctx;
-}
-
-void configure_ssl_context(SSL_CTX *ctx) {
-    if (SSL_CTX_use_certificate_file(ctx, "server.crt", SSL_FILETYPE_PEM) <= 0 ||
-        SSL_CTX_use_PrivateKey_file(ctx, "server.key", SSL_FILETYPE_PEM) <= 0) {
-        perror("SSL certificate error");
-        exit(EXIT_FAILURE);
-    }
-}
-#endif
-
-char *str_dup_until(const char *start, char stop) {
-    const char *end = strchr(start, stop);
-    if (!end) end = start + strlen(start);
-    
-    size_t len = end - start;
-    char *copy = malloc(len + 1);
-    strncpy(copy, start, len);
-    copy[len] = '\0';
-    return copy;
-}
-
-
-void parse_cookies(HTTP_Request *req, const char *header) {
-    const char *cookie_header = strstr(header, "Cookie: ");
-    if (!cookie_header) return;
-    
-    cookie_header += 8;
-    char *cookies_str = strdup(cookie_header);
-    char *token = strtok(cookies_str, "; ");
-    
-    while (token) {
-        char *eq = strchr(token, '=');
-        if (eq) {
-            *eq = '\0';
-            req->cookie_jar.cookies = realloc(req->cookie_jar.cookies, 
-                (req->cookie_jar.cookie_count + 1) * sizeof(HTTP_Cookie));
-            req->cookie_jar.cookies[req->cookie_jar.cookie_count].name = strdup(token);
-            req->cookie_jar.cookies[req->cookie_jar.cookie_count].value = strdup(eq + 1);
-            req->cookie_jar.cookie_count++;
-        }
-        token = strtok(NULL, "; ");
-    }
-    
-    free(cookies_str);
-}
-
-
-const char* get_mime_type(const char *filename) {
-    const char *dot = strrchr(filename, '.');
-    if (!dot || dot == filename) return "application/octet-stream";
-    
-    char ext[32];
-    size_t i = 0;
-    dot++;
-    while (*dot && i < sizeof(ext) - 1) {
-        ext[i++] = tolower(*dot++);
-    }
-    ext[i] = '\0';
-    
-    if (strcmp(ext, "html") == 0) return "text/html";
-    if (strcmp(ext, "css") == 0) return "text/css";
-    if (strcmp(ext, "js") == 0) return "application/javascript";
-    if (strcmp(ext, "png") == 0) return "image/png";
-    if (strcmp(ext, "jpg") == 0 || strcmp(ext, "jpeg") == 0) return "image/jpeg";
-    if (strcmp(ext, "gif") == 0) return "image/gif";
-    if (strcmp(ext, "svg") == 0) return "image/svg+xml";
-    if (strcmp(ext, "ico") == 0) return "image/x-icon";
-    if (strcmp(ext, "pdf") == 0) return "application/pdf";
-    if (strcmp(ext, "txt") == 0) return "text/plain";
-    if (strcmp(ext, "xml") == 0) return "application/xml";
-    if (strcmp(ext, "json") == 0) return "application/json";
-    
-    return "application/octet-stream";
-}
-
-HTTP_Request parse_http_request(const char *request) {
-    HTTP_Request result = {0};
-    
-    if (strncmp(request, "GET ", 4) == 0) {
-        result.method = HM_GET;
-    } else if (strncmp(request, "POST ", 5) == 0) {
-        result.method = HM_POST;
-    } else {
-        log_msg("ERROR", "Unsupported HTTP method\n");
-        return result;
-    }
-
-    const char *route_start = request + (result.method == HM_POST ? 5 : 4);
-    result.route = str_dup_until(route_start, ' '); 
-
-    char *query = strchr(result.route, '?');
-    if (query) {
-        *query = '\0'; 
-        query++;
-        int count = 0;
-        for (char *p = query; *p; p++) {
-            if (*p == '&') count++;
-        }
-        result.param_count = count + 1;
-        result.parameters = malloc(sizeof(HTTP_Parameter) * result.param_count);
-
-        char *pair = strtok(query, "&");
-        int i = 0;
-        while (pair && i < result.param_count) {
-            result.parameters[i].key = str_dup_until(pair, '=');
-            result.parameters[i].value = strdup(strchr(pair, '=') + 1);
-            pair = strtok(NULL, "&");
-            i++;
-        }
-    }
-
-    const char *host_header = strstr(request, "Host: ");
-    if (host_header) {
-        result.host = str_dup_until(host_header + 6, '\n');
-    }
-    const char *xff_header = strstr(request, "X-Forwarded-For: ");
-    if (xff_header) {
-        result.extracted_ip = str_dup_until(xff_header + 17, '\r');
-    }
-    else {
-        result.extracted_ip = strdup("NOTPROVIDED");
-    }
-    parse_cookies(&result, request);
-
-    if (result.method == HM_POST) {
-        const char *body = strstr(request, "\r\n\r\n");
-        if (body) {
-            body += 4;
-            result.body = strdup(body);
-
-            const char *content_type = strstr(request, "Content-Type: ");
-            if (content_type && strstr(content_type, "application/x-www-form-urlencoded")) {
-                int count = 0;
-                for (const char *p = body; *p; p++) {
-                    if (*p == '&') count++;
-                }
-                result.param_count = count + 1;
-                result.parameters = malloc(sizeof(HTTP_Parameter) * result.param_count);
-
-                char *body_copy = strdup(body);
-                char *pair = strtok(body_copy, "&");
-                int i = 0;
-                while (pair && i < result.param_count) {
-                    result.parameters[i].key = str_dup_until(pair, '=');
-                    result.parameters[i].value = strdup(strchr(pair, '=') + 1);
-                    pair = strtok(NULL, "&");
-                    i++;
-                }
-                free(body_copy);
-            }
-        }
-    }
-
-    return result;
-}
-
-#ifdef SSL_ENABLE
-void send_response(int client_socket, char *status, char *content, SSL *ssl) {
-#else
-void send_response(int client_socket, char *status, char *content) {
-#endif
-    size_t len = strlen(content);
-    char *response = malloc(len + 50);
-    snprintf(response, len + 50, "HTTP/1.1 %s\r\nContent-Length: %zu\r\n\r\n%s", status, len, content);
-    
-#ifdef SSL_ENABLE
-    SSL_write(ssl, response, strlen(response));
-#else
-    send(client_socket, response, strlen(response), 0);
-#endif
-
-    free(response);
-}
-
-int check_route(char *route, char *exroute) {
-    int x = strncmp(route, exroute, strlen(route));
-    if (x == 0) {
-        return 1;
-    } else {
-        return 0;
-    }
-}
-
-char *method_to_str(HTTP_Method method) {
-    if (method == 0) return "GET";
-    if (method == 1) return "POST";
-    else return "Unknown";
-}
-
-void send_file_response(int client_socket, char *status, const char *filepath
-#ifdef SSL_ENABLE
-    , SSL *ssl
-#endif
-) {
-    FILE *fp = fopen(filepath, "rb");
-    if (!fp) {
-        char *not_found = "404 Not Found";
-#ifdef SSL_ENABLE
-        send_response(client_socket, "404 Not Found", not_found, ssl);
-#else
-        send_response(client_socket, "404 Not Found", not_found);
-#endif
-        return;
-    }
-
-    fseek(fp, 0, SEEK_END);
-    long file_size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-    
-    const char *mime_type = get_mime_type(filepath);
-    
-    char header[512];
-    snprintf(header, sizeof(header), 
-        "HTTP/1.1 %s\r\n"
-        "Content-Type: %s\r\n"
-        "Content-Length: %ld\r\n"
-        "Cache-Control: public, max-age=31536000\r\n"
-        "\r\n", 
-        status, mime_type, file_size);
-        
-#ifdef SSL_ENABLE
-    SSL_write(ssl, header, strlen(header));
-#else
-    send(client_socket, header, strlen(header), 0);
-#endif
-
-    char *buffer = malloc(R_BUFFER_SIZE);
-    if (!buffer) {
-        fclose(fp);
-        return;
-    }
-
-    size_t bytes_read;
-    while ((bytes_read = fread(buffer, 1, R_BUFFER_SIZE, fp)) > 0) {
-#ifdef SSL_ENABLE
-        SSL_write(ssl, buffer, bytes_read);
-#else
-        send(client_socket, buffer, bytes_read, 0);
-#endif
-    }
-    
-    free(buffer);
-    fclose(fp);
-}
-
-int check_ip_address(char *ip) {
-    for (int i = 0; i < block_count; i++) {
-        if (strncmp(ip, blocklist[i], strlen(blocklist[i])) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-void set_cookie(int client_socket, char *cookie_name, char *cookie_value
-#ifdef SSL_ENABLE
-                               , SSL *ssl
-#endif
-) {
-    char response[1024];
-    snprintf(response, sizeof(response), 
-             "HTTP/1.1 200 OK\r\n"
-             "Content-Length: 0\r\n"
-             "Set-Cookie: %s=%s; Path=/; HttpOnly\r\n"
-             "\r\n",
-              cookie_name, cookie_value);
-
-#ifdef SSL_ENABLE
-    SSL_write(ssl, response, strlen(response));
-#else
-    send(client_socket, response, strlen(response), 0);
-#endif
+    blocklist_free();
+    exit(0);
 }
 
 int handle_routes(int client_socket, HTTP_Request req
@@ -486,11 +107,29 @@ void handle_client(int client_socket
     
 
     HTTP_Request req = parse_http_request(buffer);
+    if (req.method == HM_UNKNOWN) return;
     if (LOG_IP_ENABLED) {
         printf("[%s:%d %s] %s %s\n", client_ip_address, client_port, time_str, method_to_str(req.method), req.route);
     } else {
         printf("[%s] %s %s\n", time_str, method_to_str(req.method), req.route);
     }
+
+    char *session_token = token_generate();
+    if (session_token) {
+        bool cookie_set = hapi_set_cookie(client_socket, "mfh_session_token", session_token, 3600
+#ifdef SSL_ENABLE
+            , ssl
+#endif
+        );
+        
+        //if (!cookie_set) {
+        //    log_msg("ERROR", "Failed to set session cookie\n");
+        //}
+        (void) cookie_set;
+        free(session_token);
+    }
+
+
 #ifdef SSL_ENABLE 
     if (handle_routes(client_socket, req, ssl)) {
 #else 
@@ -500,6 +139,7 @@ void handle_client(int client_socket
     }
 
 cleanup:
+    hapi_free_cookies(&req);
     free(req.host);
     free(req.route);
     if (req.parameters) {
@@ -523,9 +163,16 @@ cleanup:
 int main() {
     int server_fd, client_socket;
     struct sockaddr_in server_addr;
-    if (load_blocklist("BLOCKLIST") < 0) {
+    if (blocklist_load("BLOCKLIST") < 0) {
         return 1;
     } 
+    
+    struct sigaction sa;
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    sigaction(SIGINT, &sa, NULL);
 
 #ifdef SSL_ENABLE 
     SSL_CTX *ctx;
@@ -540,6 +187,7 @@ int main() {
         perror("socket");
         exit(EXIT_FAILURE);
     }
+    server_fdG = server_fd;
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -593,6 +241,6 @@ int main() {
     SSL_CTX_free(ctx);
 #endif 
     close(server_fd);
-    free_blocklist();
+    blocklist_free();
     return 0;
 }
