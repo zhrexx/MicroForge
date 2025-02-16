@@ -10,14 +10,14 @@
 #include <time.h>
 #include <ctype.h> 
 
-#ifndef PORT 
-#define PORT 8080
+#ifndef S_PORT 
+#define S_PORT 8080
 #endif
 #define LOG_IP_ENABLED 1
-#define BUFFER_SIZE (1 * 1024 * 1024)
-#define MAX_LINES 1024
-#define MAX_TOKENS 256
-#define MAX_LENGTH 1024
+#define R_BUFFER_SIZE (1 * 1024 * 1024)
+#define BLOCKLIST_MAX_LINES 1024
+#define BLOCKLIST_MAX_TOKENS 256
+#define BLOCKLIST_MAX_LENGTH 1024
 
 #ifdef SSL_ENABLE
 #include <openssl/ssl.h>
@@ -33,6 +33,15 @@ typedef struct {
     char *key;
     char *value;
 } HTTP_Parameter;
+typedef struct {
+    char *name;
+    char *value;
+} HTTP_Cookie;
+
+typedef struct {
+    HTTP_Cookie *cookies;
+    int cookie_count;
+} HTTP_CookieJar;
 
 typedef struct {
     HTTP_Method method;
@@ -42,6 +51,7 @@ typedef struct {
     char *host;
     char *body;
     char *extracted_ip;
+    HTTP_CookieJar cookie_jar;
 } HTTP_Request;
 
 char **blocklist = NULL;
@@ -54,19 +64,19 @@ int load_blocklist(const char *filename) {
         return -1;
     }
 
-    blocklist = malloc(MAX_LINES * sizeof(char *));
+    blocklist = malloc(BLOCKLIST_MAX_LINES * sizeof(char *));
     if (!blocklist) {
         perror("Memory allocation failed");
         fclose(file);
         return -1;
     }
 
-    char buffer[MAX_LENGTH];
-    while (fgets(buffer, sizeof(buffer), file) && block_count < MAX_LINES) {
+    char buffer[BLOCKLIST_MAX_LENGTH];
+    while (fgets(buffer, sizeof(buffer), file) && block_count < BLOCKLIST_MAX_LINES) {
         buffer[strcspn(buffer, "\n")] = 0;
 
         char *token = strtok(buffer, " ");
-        while (token && block_count < MAX_LINES) {
+        while (token && block_count < BLOCKLIST_MAX_LINES) {
             blocklist[block_count] = strdup(token);
             if (!blocklist[block_count]) {
                 perror("Memory allocation failed");
@@ -88,36 +98,6 @@ void free_blocklist() {
     }
     free(blocklist);
 }
-
-
-const char* get_mime_type(const char *filename) {
-    const char *dot = strrchr(filename, '.');
-    if (!dot || dot == filename) return "application/octet-stream";
-    
-    char ext[32];
-    size_t i = 0;
-    dot++;
-    while (*dot && i < sizeof(ext) - 1) {
-        ext[i++] = tolower(*dot++);
-    }
-    ext[i] = '\0';
-    
-    if (strcmp(ext, "html") == 0) return "text/html";
-    if (strcmp(ext, "css") == 0) return "text/css";
-    if (strcmp(ext, "js") == 0) return "application/javascript";
-    if (strcmp(ext, "png") == 0) return "image/png";
-    if (strcmp(ext, "jpg") == 0 || strcmp(ext, "jpeg") == 0) return "image/jpeg";
-    if (strcmp(ext, "gif") == 0) return "image/gif";
-    if (strcmp(ext, "svg") == 0) return "image/svg+xml";
-    if (strcmp(ext, "ico") == 0) return "image/x-icon";
-    if (strcmp(ext, "pdf") == 0) return "application/pdf";
-    if (strcmp(ext, "txt") == 0) return "text/plain";
-    if (strcmp(ext, "xml") == 0) return "application/xml";
-    if (strcmp(ext, "json") == 0) return "application/json";
-    
-    return "application/octet-stream";
-}
-
 
 void log_msg(const char *prefix, const char *format, ...) {
     va_list args;
@@ -160,6 +140,60 @@ char *str_dup_until(const char *start, char stop) {
     strncpy(copy, start, len);
     copy[len] = '\0';
     return copy;
+}
+
+
+void parse_cookies(HTTP_Request *req, const char *header) {
+    const char *cookie_header = strstr(header, "Cookie: ");
+    if (!cookie_header) return;
+    
+    cookie_header += 8;
+    char *cookies_str = strdup(cookie_header);
+    char *token = strtok(cookies_str, "; ");
+    
+    while (token) {
+        char *eq = strchr(token, '=');
+        if (eq) {
+            *eq = '\0';
+            req->cookie_jar.cookies = realloc(req->cookie_jar.cookies, 
+                (req->cookie_jar.cookie_count + 1) * sizeof(HTTP_Cookie));
+            req->cookie_jar.cookies[req->cookie_jar.cookie_count].name = strdup(token);
+            req->cookie_jar.cookies[req->cookie_jar.cookie_count].value = strdup(eq + 1);
+            req->cookie_jar.cookie_count++;
+        }
+        token = strtok(NULL, "; ");
+    }
+    
+    free(cookies_str);
+}
+
+
+const char* get_mime_type(const char *filename) {
+    const char *dot = strrchr(filename, '.');
+    if (!dot || dot == filename) return "application/octet-stream";
+    
+    char ext[32];
+    size_t i = 0;
+    dot++;
+    while (*dot && i < sizeof(ext) - 1) {
+        ext[i++] = tolower(*dot++);
+    }
+    ext[i] = '\0';
+    
+    if (strcmp(ext, "html") == 0) return "text/html";
+    if (strcmp(ext, "css") == 0) return "text/css";
+    if (strcmp(ext, "js") == 0) return "application/javascript";
+    if (strcmp(ext, "png") == 0) return "image/png";
+    if (strcmp(ext, "jpg") == 0 || strcmp(ext, "jpeg") == 0) return "image/jpeg";
+    if (strcmp(ext, "gif") == 0) return "image/gif";
+    if (strcmp(ext, "svg") == 0) return "image/svg+xml";
+    if (strcmp(ext, "ico") == 0) return "image/x-icon";
+    if (strcmp(ext, "pdf") == 0) return "application/pdf";
+    if (strcmp(ext, "txt") == 0) return "text/plain";
+    if (strcmp(ext, "xml") == 0) return "application/xml";
+    if (strcmp(ext, "json") == 0) return "application/json";
+    
+    return "application/octet-stream";
 }
 
 HTTP_Request parse_http_request(const char *request) {
@@ -209,7 +243,7 @@ HTTP_Request parse_http_request(const char *request) {
     else {
         result.extracted_ip = strdup("NOTPROVIDED");
     }
-
+    parse_cookies(&result, request);
 
     if (result.method == HM_POST) {
         const char *body = strstr(request, "\r\n\r\n");
@@ -313,14 +347,14 @@ void send_file_response(int client_socket, char *status, const char *filepath
     send(client_socket, header, strlen(header), 0);
 #endif
 
-    char *buffer = malloc(BUFFER_SIZE);
+    char *buffer = malloc(R_BUFFER_SIZE);
     if (!buffer) {
         fclose(fp);
         return;
     }
 
     size_t bytes_read;
-    while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp)) > 0) {
+    while ((bytes_read = fread(buffer, 1, R_BUFFER_SIZE, fp)) > 0) {
 #ifdef SSL_ENABLE
         SSL_write(ssl, buffer, bytes_read);
 #else
@@ -338,6 +372,54 @@ int check_ip_address(char *ip) {
             return 1;
         }
     }
+    return 0;
+}
+
+void set_cookie(int client_socket, char *cookie_name, char *cookie_value
+#ifdef SSL_ENABLE
+                               , SSL *ssl
+#endif
+) {
+    char response[1024];
+    snprintf(response, sizeof(response), 
+             "HTTP/1.1 200 OK\r\n"
+             "Content-Length: 0\r\n"
+             "Set-Cookie: %s=%s; Path=/; HttpOnly\r\n"
+             "\r\n",
+              cookie_name, cookie_value);
+
+#ifdef SSL_ENABLE
+    SSL_write(ssl, response, strlen(response));
+#else
+    send(client_socket, response, strlen(response), 0);
+#endif
+}
+
+int handle_routes(int client_socket, HTTP_Request req
+#ifdef SSL_ENABLE
+    SSL *ssl
+#endif 
+        ) {
+    char file_path[512];
+    if (strcmp(req.route, "/") == 0) {
+        strcpy(file_path, "index.html");
+    } else if (strcmp(req.route, "/server_info") == 0 || strcmp(req.route, "/server_info/") == 0) {
+#ifdef SSL_ENABLE
+        send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", ssl);
+#else
+        send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>");
+#endif
+        return 1;
+    } else {
+        snprintf(file_path, sizeof(file_path), "%s", req.route + 1);
+    }
+
+#ifdef SSL_ENABLE
+    send_file_response(client_socket, "200 OK", file_path, ssl);
+#else
+    send_file_response(client_socket, "200 OK", file_path);
+#endif
+
     return 0;
 }
 
@@ -375,7 +457,7 @@ void handle_client(int client_socket
         return;
     }
 
-    char buffer[BUFFER_SIZE];
+    char buffer[R_BUFFER_SIZE];
     ssize_t bytes_received;
 
 #ifdef SSL_ENABLE 
@@ -409,26 +491,13 @@ void handle_client(int client_socket
     } else {
         printf("[%s] %s %s\n", time_str, method_to_str(req.method), req.route);
     }
-
-    char file_path[512];
-    if (strcmp(req.route, "/") == 0) {
-        strcpy(file_path, "index.html");
-    } else if (strcmp(req.route, "/server_info") == 0 || strcmp(req.route, "/server_info/") == 0) {
-#ifdef SSL_ENABLE
-        send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", ssl);
-#else
-        send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>");
+#ifdef SSL_ENABLE 
+    if (handle_routes(client_socket, req, ssl)) {
+#else 
+    if (handle_routes(client_socket, req)) {
 #endif
         goto cleanup;
-    } else {
-        snprintf(file_path, sizeof(file_path), "%s", req.route + 1);
     }
-
-#ifdef SSL_ENABLE
-    send_file_response(client_socket, "200 OK", file_path, ssl);
-#else
-    send_file_response(client_socket, "200 OK", file_path);
-#endif
 
 cleanup:
     free(req.host);
@@ -474,7 +543,7 @@ int main() {
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(PORT);
+    server_addr.sin_port = htons(S_PORT);
 
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
         perror("bind");
