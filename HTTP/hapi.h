@@ -58,9 +58,9 @@ typedef struct {
     HTTP_CookieJar cookie_jar;
 } HTTP_Request;
 
+static char **blocklist = NULL;
+static int block_count = 0;
 
-char **blocklist = NULL;
-int block_count = 0;
 
 void log_msg(const char *prefix, const char *format, ...) {
     va_list args;
@@ -81,7 +81,7 @@ char *str_dup_until(const char *start, char stop) {
     return copy;
 }
 
-int check_route(char *route, char *exroute) {
+int http_check_route(char *route, char *exroute) {
     int x = strncmp(route, exroute, strlen(route));
     if (x == 0) {
         return 1;
@@ -90,16 +90,16 @@ int check_route(char *route, char *exroute) {
     }
 }
 
-char *method_to_str(HTTP_Method method) {
-    if (method == 0) return "GET";
-    if (method == 1) return "POST";
+char *http_method_to_str(HTTP_Method method) {
+    if (method == HM_GET) return "GET";
+    if (method == HM_POST) return "POST";
     else return "UNKNOWN";
 }
 
-int check_ip_address(char *ip) {
+int http_check_ip_address(char *ip) {
     for (int i = 0; i < block_count; i++) {
         if (strncmp(ip, blocklist[i], strlen(blocklist[i])) == 0) {
-            return 1;
+                return 1;
         }
     }
     return 0;
@@ -128,7 +128,7 @@ char *token_generate() {
     return token;
 }
 
-const char* get_mime_type(const char *filename) {
+const char* mime_type_get(const char *filename) {
     const char *dot = strrchr(filename, '.');
     if (!dot || dot == filename) return "application/octet-stream";
     
@@ -379,7 +379,14 @@ void hapi_free_cookies(HTTP_Request *req) {
 }
 
 
-void parse_cookies(HTTP_Request *req, const char *header) {
+
+
+
+
+/*
+ * Parsing Cookies
+ */
+void http_parse_cookies(HTTP_Request *req, const char *header) {
     const char *cookie_header = strstr(header, "Cookie: ");
     if (!cookie_header) return;
     
@@ -404,8 +411,10 @@ void parse_cookies(HTTP_Request *req, const char *header) {
 }
 
 
-
-HTTP_Request parse_http_request(const char *request) {
+/*
+ * Calls helper functions and parses request 
+ */
+HTTP_Request http_parse_request(const char *request) {
     HTTP_Request result = {0};
     
     if (strncmp(request, "GET ", 4) == 0) {
@@ -453,7 +462,7 @@ HTTP_Request parse_http_request(const char *request) {
     else {
         result.extracted_ip = strdup("NOTPROVIDED");
     }
-    parse_cookies(&result, request);
+    http_parse_cookies(&result, request);
 
     if (result.method == HM_POST) {
         const char *body = strstr(request, "\r\n\r\n");
@@ -488,12 +497,12 @@ HTTP_Request parse_http_request(const char *request) {
 }
 
 #ifdef SSL_ENABLE
-void init_ssl() {
+void ssl_init() {
     SSL_load_error_strings();
     OpenSSL_add_ssl_algorithms();
 }
 
-SSL_CTX *create_ssl_context() {
+SSL_CTX *ssl_create_context() {
     SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
     if (!ctx) {
         perror("Unable to create SSL context");
@@ -502,7 +511,7 @@ SSL_CTX *create_ssl_context() {
     return ctx;
 }
 
-void configure_ssl_context(SSL_CTX *ctx) {
+void ssl_configure_context(SSL_CTX *ctx) {
     if (SSL_CTX_use_certificate_file(ctx, "server.crt", SSL_FILETYPE_PEM) <= 0 ||
         SSL_CTX_use_PrivateKey_file(ctx, "server.key", SSL_FILETYPE_PEM) <= 0) {
         perror("SSL certificate error");
@@ -512,9 +521,9 @@ void configure_ssl_context(SSL_CTX *ctx) {
 #endif
 
 #ifdef SSL_ENABLE
-void send_response(int client_socket, const char *status, const char *content, SSL *ssl) {
+void http_send_response(int client_socket, const char *status, const char *content, SSL *ssl) {
 #else
-void send_response(int client_socket, const char *status, const char *content) {
+void http_send_response(int client_socket, const char *status, const char *content) {
 #endif
     char *cookie_header = NULL;
     char *session_token = token_generate();
@@ -564,7 +573,7 @@ void send_response(int client_socket, const char *status, const char *content) {
     free(response);
 }
 
-void send_file_response(int client_socket, char *status, const char *filepath
+void http_send_file_response(int client_socket, char *status, const char *filepath
 #ifdef SSL_ENABLE
     , SSL *ssl
 #endif
@@ -573,9 +582,9 @@ void send_file_response(int client_socket, char *status, const char *filepath
     if (!fp) {
         char *not_found = "404 Not Found";
 #ifdef SSL_ENABLE
-        send_response(client_socket, "404 Not Found", not_found, ssl);
+        http_send_response(client_socket, "404 Not Found", not_found, ssl);
 #else
-        send_response(client_socket, "404 Not Found", not_found);
+        http_send_response(client_socket, "404 Not Found", not_found);
 #endif
         return;
     }
@@ -584,7 +593,7 @@ void send_file_response(int client_socket, char *status, const char *filepath
     long file_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
     
-    const char *mime_type = get_mime_type(filepath);
+    const char *mime_type = mime_type_get(filepath);
     
     char *cookie_header = NULL;
     char *session_token = token_generate();
@@ -651,12 +660,15 @@ void send_file_response(int client_socket, char *status, const char *filepath
     fclose(fp);
 }
 
+/* 
+ * Loads BLOCKLIST (= List with all blocked IP addresses
+ */
 int blocklist_load(const char *filename) {
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        perror("Error opening file");
-        return -1;
-    }
+        FILE *file = fopen(filename, "r");
+        if (!file) {
+            perror("Error opening file");
+            return -1;
+        }
 
     blocklist = malloc(BLOCKLIST_MAX_LINES * sizeof(char *));
     if (!blocklist) {
@@ -687,10 +699,10 @@ int blocklist_load(const char *filename) {
 }
 
 void blocklist_free() {
-    for (int i = 0; i < block_count; i++) {
-        free(blocklist[i]);
-    }
-    free(blocklist);
+        for (int i = 0; i < block_count; i++) {
+            free(blocklist[i]);
+        }
+        free(blocklist);
 }
 
 #endif // HAPI_H

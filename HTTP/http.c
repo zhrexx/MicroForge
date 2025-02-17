@@ -7,6 +7,9 @@
 
 int server_fdG = 0;
 
+/*
+ * Handle SIGINT and others
+*/
 void handle_signal(int sig) {
     (void) sig;
     if (close(server_fdG) < 0) {
@@ -16,19 +19,22 @@ void handle_signal(int sig) {
     exit(0);
 }
 
-int handle_routes(int client_socket, HTTP_Request req
+/*
+ * Helper function to handle every request
+*/
 #ifdef SSL_ENABLE
-    SSL *ssl
-#endif 
-        ) {
+int handle_routes(int client_socket, HTTP_Request req, SSL *ssl) {
+#else 
+int handle_routes(int client_socket, HTTP_Request req) {
+#endif
     char file_path[512];
     if (strcmp(req.route, "/") == 0) {
         strcpy(file_path, "index.html");
     } else if (strcmp(req.route, "/server_info") == 0 || strcmp(req.route, "/server_info/") == 0) {
 #ifdef SSL_ENABLE
-        send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", ssl);
+        http_send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", ssl);
 #else
-        send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>");
+        http_send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>");
 #endif
         return 1;
     } else {
@@ -36,14 +42,17 @@ int handle_routes(int client_socket, HTTP_Request req
     }
 
 #ifdef SSL_ENABLE
-    send_file_response(client_socket, "200 OK", file_path, ssl);
+    http_send_file_response(client_socket, "200 OK", file_path, ssl);
 #else
-    send_file_response(client_socket, "200 OK", file_path);
+    http_send_file_response(client_socket, "200 OK", file_path);
 #endif
 
     return 0;
 }
 
+/*
+ * Parses Request and calls helper function to handle it
+ */
 void handle_client(int client_socket
 #ifdef SSL_ENABLE
     , SSL_CTX *ctx
@@ -52,8 +61,6 @@ void handle_client(int client_socket
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     
-    
-
     if (getpeername(client_socket, (struct sockaddr *)&client_addr, &client_len) < 0) {
         perror("getpeername failed");
         close(client_socket);
@@ -70,10 +77,23 @@ void handle_client(int client_socket
     time(&rawtime); 
     timeinfo = localtime(&rawtime);
     strftime(time_str, sizeof(time_str), "%d-%m %H:%M", timeinfo);
-    
-    if (check_ip_address(client_ip_address)) {
+#ifdef SSL_ENABLE
+    SSL *ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, client_socket);
+    if (SSL_accept(ssl) <= 0) {
+        SSL_free(ssl);
+        close(client_socket);
+        return;
+    }
+#endif
+    if (http_check_ip_address(client_ip_address)) {
         printf("[%s:%d %s] Blocked Connection: Banned IP address\n", client_ip_address, client_port, time_str);
-        send_response(client_socket, "404 BLOCKED_IP_ADDRESS", "Your IP address is blocked!");
+#ifdef SSL_ENABLE
+        http_send_response(client_socket, "404 BLOCKED_IP_ADDRESS", "Your IP address is blocked!", ssl);
+#else 
+        http_send_response(client_socket, "404 BLOCKED_IP_ADDRESS", "Your IP address is blocked!");
+#endif
+
         close(client_socket);
         return;
     }
@@ -82,13 +102,6 @@ void handle_client(int client_socket
     ssize_t bytes_received;
 
 #ifdef SSL_ENABLE 
-    SSL *ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, client_socket);
-    if (SSL_accept(ssl) <= 0) {
-        SSL_free(ssl);
-        close(client_socket);
-        return;
-    }
     bytes_received = SSL_read(ssl, buffer, sizeof(buffer) - 1);
 #else
     bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
@@ -106,12 +119,12 @@ void handle_client(int client_socket
     buffer[bytes_received] = '\0';
     
 
-    HTTP_Request req = parse_http_request(buffer);
+    HTTP_Request req = http_parse_request(buffer);
     if (req.method == HM_UNKNOWN) return;
     if (LOG_IP_ENABLED) {
-        printf("[%s:%d %s] %s %s\n", client_ip_address, client_port, time_str, method_to_str(req.method), req.route);
+        printf("[%s:%d %s] %s %s\n", client_ip_address, client_port, time_str, http_method_to_str(req.method), req.route);
     } else {
-        printf("[%s] %s %s\n", time_str, method_to_str(req.method), req.route);
+        printf("[%s] %s %s\n", time_str, http_method_to_str(req.method), req.route);
     }
 
     char *session_token = token_generate();
@@ -163,6 +176,7 @@ cleanup:
 int main() {
     int server_fd, client_socket;
     struct sockaddr_in server_addr;
+
     if (blocklist_load("BLOCKLIST") < 0) {
         return 1;
     } 
@@ -176,9 +190,9 @@ int main() {
 
 #ifdef SSL_ENABLE 
     SSL_CTX *ctx;
-    init_ssl();
-    ctx = create_ssl_context();
-    configure_ssl_context(ctx);
+    ssl_init();
+    ctx = ssl_create_context();
+    ssl_configure_context(ctx);
 #endif 
 
     double VERSION = 1.0;
