@@ -28,9 +28,12 @@ int handle_routes(int client_socket, HTTP_Request req, SSL *ssl) {
 int handle_routes(int client_socket, HTTP_Request req) {
 #endif
     char file_path[512];
-    if (strcmp(req.route, "/") == 0) {
+    if (hapi_f(&req, client_socket)) {
+        return 0;
+    }
+    if (http_check_route(req.route, "/")) {
         strcpy(file_path, "index.html");
-    } else if (strcmp(req.route, "/server_info") == 0 || strcmp(req.route, "/server_info/") == 0) {
+    } else if (http_check_route(req.route, "/server_info") || http_check_route(req.route, "/server_info/")) {
 #ifdef SSL_ENABLE
         http_send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", ssl);
 #else
@@ -165,7 +168,6 @@ cleanup:
     if (req.body) {
         free(req.body);
     }
-
 #ifdef SSL_ENABLE 
     SSL_shutdown(ssl);
     SSL_free(ssl);
@@ -174,87 +176,10 @@ cleanup:
 }
 
 int main() {
-    int server_fd, client_socket;
-    struct sockaddr_in server_addr;
-
-    if (blocklist_load("BLOCKLIST") < 0) {
+    handle_client_f hcF = handle_client;
+    if (http_run_server(S_PORT, &server_fdG, hcF) < 0) {
+        fprintf(stderr, "ERROR: Could not run server!\n");
         return 1;
-    } 
-    
-    struct sigaction sa;
-    sa.sa_handler = handle_signal;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-
-    sigaction(SIGINT, &sa, NULL);
-
-#ifdef SSL_ENABLE 
-    SSL_CTX *ctx;
-    ssl_init();
-    ctx = ssl_create_context();
-    ssl_configure_context(ctx);
-#endif 
-
-    double VERSION = 1.0;
-
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-        perror("socket");
-        exit(EXIT_FAILURE);
     }
-    server_fdG = server_fd;
-
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(S_PORT);
-
-    if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
-        perror("bind");
-        close(server_fd);
-        exit(EXIT_FAILURE);
-    }
-
-    if (listen(server_fd, 5) == -1) {
-        perror("listen");
-        close(server_fd);
-        exit(EXIT_FAILURE);
-    }
-
-    printf("-------------------------------------------------------------------------------------\n");
-    printf("MicroForgeHTTP\n");
-    char *server_ip_address = inet_ntoa(server_addr.sin_addr);
-    int server_port = ntohs(server_addr.sin_port);
-    printf("- Version: %.1f\n", VERSION);
-    printf("- IP: %s:%d\n", server_ip_address, server_port);
-    printf("-------------------------------------------------------------------------------------\n");
-    printf(" LOGS:\n");
-    printf("-------------------------------------------------------------------------------------\n");
-
-    while (1) {
-        if ((client_socket = accept(server_fd, NULL, NULL)) < 0) {
-            perror("accept");
-            continue;
-        }
-        
-        pid_t pid = fork();
-        if (pid == 0) {
-            close(server_fd);
-            #ifdef SSL_ENABLE
-            handle_client(client_socket, ctx);
-            #else
-            handle_client(client_socket);
-            #endif
-            exit(0);
-        } else if (pid > 0) {
-            close(client_socket);
-        } else {
-            perror("fork");
-        }
-    }
-
-#ifdef SSL_ENABLE 
-    SSL_CTX_free(ctx);
-#endif 
-    close(server_fd);
-    blocklist_free();
     return 0;
 }

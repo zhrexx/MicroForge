@@ -9,6 +9,11 @@
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/statvfs.h>
+#include <utmp.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <time.h>
 
 void get_ip_address() {
     struct ifaddrs *ifaddr, *ifa;
@@ -58,7 +63,6 @@ void get_cpu_info() {
     printf("  Logical Cores  : %d\n", core_count);
 }
 
-
 void get_memory_info() {
     FILE *meminfo = fopen("/proc/meminfo", "r");
     if (meminfo == NULL) {
@@ -103,6 +107,122 @@ void get_process_count() {
 
     printf("Number of Processes: %d\n", info.procs);
 }
+
+void get_disk_usage() {
+    struct statvfs stat;
+    if (statvfs("/", &stat) != 0) {
+        perror("statvfs");
+        return;
+    }
+
+    unsigned long block_size = stat.f_frsize;
+    unsigned long total_blocks = stat.f_blocks;
+    unsigned long free_blocks = stat.f_bfree;
+
+    unsigned long total_space = total_blocks * block_size / (1024 * 1024);
+    unsigned long free_space = free_blocks * block_size / (1024 * 1024);
+
+    printf("Disk Usage:\n");
+    printf("  Total Space   : %lu MB\n", total_space);
+    printf("  Free Space    : %lu MB\n", free_space);
+}
+
+void get_load_average() {
+    double loadavg[3];
+    if (getloadavg(loadavg, 3) == -1) {
+        perror("getloadavg");
+        return;
+    }
+
+    printf("Load Average:\n");
+    printf("  1 Minute      : %.2f\n", loadavg[0]);
+    printf("  5 Minutes     : %.2f\n", loadavg[1]);
+    printf("  15 Minutes    : %.2f\n", loadavg[2]);
+}
+
+void get_logged_in_users() {
+    struct utmp *entry;
+    setutent();
+    printf("Logged In Users:\n");
+    while ((entry = getutent()) != NULL) {
+        if (entry->ut_type == USER_PROCESS) {
+            printf("  %s\n", entry->ut_user);
+        }
+    }
+    endutent();
+}
+
+void get_battery_status() {
+    FILE *battery_info = fopen("/sys/class/power_supply/BAT0/uevent", "r");
+    if (battery_info == NULL) {
+        printf("Battery information not available.\n");
+        return;
+    }
+
+    char line[256];
+    printf("Battery Status:\n");
+    while (fgets(line, sizeof(line), battery_info)) {
+        if (strncmp(line, "POWER_SUPPLY_CAPACITY", 21) == 0) {
+            printf("  Battery Level  : %s", line);
+        } else if (strncmp(line, "POWER_SUPPLY_STATUS", 19) == 0) {
+            printf("  Battery Status : %s", line);
+        }
+    }
+    fclose(battery_info);
+}
+
+void get_gpu_info() {
+    FILE *gpu_info = popen("lspci | grep VGA", "r");
+    if (gpu_info == NULL) {
+        printf("GPU information not available.\n");
+        return;
+    }
+
+    char line[256];
+    printf("GPU Information:\n");
+    while (fgets(line, sizeof(line), gpu_info)) {
+        printf("  %s", line);
+    }
+}
+
+void get_temperature() {
+    FILE *temp_file = fopen("/sys/class/thermal/thermal_zone0/temp", "r");
+    if (temp_file == NULL) {
+        printf("Temperature information not available.\n");
+        return;
+    }
+
+    int temp;
+    fscanf(temp_file, "%d", &temp);
+    fclose(temp_file);
+
+    printf("CPU Temperature: %.1f°C\n", temp / 1000.0);
+}
+
+void get_boot_time() {
+    FILE *stat_file = fopen("/proc/stat", "r");
+    if (stat_file == NULL) {
+        perror("fopen /proc/stat");
+        return;
+    }
+
+    char line[256];
+    fgets(line, sizeof(line), stat_file); // Ignore the first line
+    fgets(line, sizeof(line), stat_file); // Get the second line (boot time)
+
+    long long boot_time;
+    sscanf(line, "btime %lld", &boot_time);
+    fclose(stat_file);
+
+    time_t boot_time_t = (time_t)boot_time;
+    struct tm *tm_info = localtime(&boot_time_t);
+    
+    char buffer[80];
+    strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", tm_info);
+
+    printf("Boot Time: %s\n", buffer);
+}
+
 
 int main() {
     uid_t uid = getuid();
@@ -162,6 +282,13 @@ int main() {
     printf("\n");
     get_uptime();
     get_process_count();
+    get_disk_usage();
+    get_load_average();
+    get_logged_in_users();
+    get_battery_status();
+    get_gpu_info();
+    get_temperature();
+    get_boot_time();
 
     printf("\nEnvironment Variables:\n");
     printf("----------------------\n");

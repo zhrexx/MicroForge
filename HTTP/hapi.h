@@ -1,3 +1,5 @@
+// HAPI = HTTP API
+
 #ifndef HAPI_H
 #define HAPI_H
 #include <stdio.h>
@@ -13,6 +15,8 @@
 #include <ctype.h> 
 #include <signal.h> 
 #include <stdbool.h>
+#include <sys/wait.h>
+#include <errno.h>
 
 #ifdef SSL_ENABLE
 #include <openssl/ssl.h>
@@ -25,7 +29,7 @@
 #define BLOCKLIST_MAX_LINES 1024
 #define BLOCKLIST_MAX_TOKENS 256
 #define BLOCKLIST_MAX_LENGTH 1024
-#define SERVER_NAME "MFH"
+#define SERVER_API_NAME "mfh"
 
 typedef enum {
     HM_GET,
@@ -61,6 +65,18 @@ typedef struct {
 static char **blocklist = NULL;
 static int block_count = 0;
 
+#ifdef SSL_ENABLE
+typedef void (*handle_client_f)(int, SSL *);
+void http_send_response(int client_socket, const char *status, const char *content, SSL *ssl);
+void http_send_file_response(int client_socket, char *status, const char *filepath, SSL *ssl);
+#else
+typedef void (*handle_client_f)(int);
+void http_send_file_response(int client_socket, char *status, const char *filepath);
+void http_send_response(int client_socket, const char *status, const char *content);
+#endif
+int blocklist_load(const char *filename);
+void blocklist_free();
+
 
 void log_msg(const char *prefix, const char *format, ...) {
     va_list args;
@@ -80,14 +96,24 @@ char *str_dup_until(const char *start, char stop) {
     copy[len] = '\0';
     return copy;
 }
+char *str_format(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+    if (len < 0) return NULL;
+    char *buffer = malloc(len + 1);
+    if (!buffer) return NULL;
+    va_start(args, fmt);
+    vsnprintf(buffer, len + 1, fmt, args);
+    va_end(args);
+    return buffer;
+}
 
-int http_check_route(char *route, char *exroute) {
-    int x = strncmp(route, exroute, strlen(route));
-    if (x == 0) {
-        return 1;
-    } else {
-        return 0;
-    }
+// NOTE: ex = Expected Route 
+int http_check_route(const char *route, const char *exroute) {
+    if (!route || !exroute) return 0;
+    return strcmp(route, exroute) == 0;
 }
 
 char *http_method_to_str(HTTP_Method method) {
@@ -378,9 +404,41 @@ void hapi_free_cookies(HTTP_Request *req) {
     req->cookie_jar.cookie_count = 0;
 }
 
+// Feature section
+// f = feature 
+
+int hapi_f_time(HTTP_Request *req, int client_socket) {
+    if (http_check_route(req->route, str_format("/%s/f/time", SERVER_API_NAME)) || http_check_route(req->route, str_format("/%s/f/time/", SERVER_API_NAME)) ) {
+        http_send_response(client_socket, "200 OK", str_format("%d", time(NULL)));
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+int hapi_f_token(HTTP_Request *req, int client_socket) {
+    if (http_check_route(req->route, str_format("/%s/f/token", SERVER_API_NAME)) || http_check_route(req->route, str_format("/%s/f/token/", SERVER_API_NAME)) ) {
+        http_send_response(client_socket, "200 OK", str_format("%s", token_generate()));
+        return 1;
+    } else {
+        return 0;
+    }
+}
 
 
-
+typedef int (*hapi_f_function)(HTTP_Request *, int);
+int hapi_f(HTTP_Request *req, int client_socket) {
+    hapi_f_function functions[2] = {
+        hapi_f_token,
+        hapi_f_time
+    };
+    for (size_t i = 0; i < 2; i++) {
+        if (functions[i](req, client_socket)) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 
 /*
@@ -528,7 +586,7 @@ void http_send_response(int client_socket, const char *status, const char *conte
     char *cookie_header = NULL;
     char *session_token = token_generate();
     if (session_token) {
-        cookie_header = hapi_format_cookie("__gtoken", session_token, 3600);
+        cookie_header = hapi_format_cookie("mfh_session_token", session_token, 3600);
         free(session_token);
     }
 
@@ -550,7 +608,7 @@ void http_send_response(int client_socket, const char *status, const char *conte
             "Connection: close\r\n"
             "%s"
             "\r\n%s",
-            status, SERVER_NAME, len, cookie_header, content);
+            status, SERVER_API_NAME, len, cookie_header, content);
         free(cookie_header);
     } else {
         written = snprintf(response, header_size,
@@ -559,7 +617,7 @@ void http_send_response(int client_socket, const char *status, const char *conte
             "Content-Length: %zu\r\n"
             "Connection: close\r\n"
             "\r\n%s",
-            status, SERVER_NAME, len, content);
+            status, SERVER_API_NAME, len, content);
     }
 
     if (written > 0 && written < (int)header_size) {
@@ -573,11 +631,11 @@ void http_send_response(int client_socket, const char *status, const char *conte
     free(response);
 }
 
-void http_send_file_response(int client_socket, char *status, const char *filepath
 #ifdef SSL_ENABLE
-    , SSL *ssl
+void http_send_file_response(int client_socket, char *status, const char *filepath, SSL *ssl) {
+#else 
+void http_send_file_response(int client_socket, char *status, const char *filepath) {
 #endif
-) {
     FILE *fp = fopen(filepath, "rb");
     if (!fp) {
         char *not_found = "404 Not Found";
@@ -598,7 +656,7 @@ void http_send_file_response(int client_socket, char *status, const char *filepa
     char *cookie_header = NULL;
     char *session_token = token_generate();
     if (session_token) {
-        cookie_header = hapi_format_cookie("__gtoken", session_token, 3600);
+        cookie_header = hapi_format_cookie("mfh_session_token", session_token, 3600);
         free(session_token);
     }
 
@@ -659,6 +717,146 @@ void http_send_file_response(int client_socket, char *status, const char *filepa
     free(buffer);
     fclose(fp);
 }
+
+extern void handle_signal(int);
+int http_run_server(int port, int *sfdG, handle_client_f f) {
+    if (!sfdG || !f || port <= 0 || port > 65535) {
+        return -1;
+    }
+    
+    int server_fd;
+    struct sockaddr_in server_addr;
+
+    if (blocklist_load("BLOCKLIST") < 0) {
+        fprintf(stderr, "Warning: Failed to load blocklist\n");
+    }
+    
+    struct sigaction sa;
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        perror("sigaction");
+        return -1;
+    }
+
+#ifdef SSL_ENABLE 
+    SSL_CTX *ctx;
+    ssl_init();
+    ctx = ssl_create_context();
+    if (!ctx) {
+        fprintf(stderr, "Failed to create SSL context\n");
+        return -1;
+    }
+    ssl_configure_context(ctx);
+#endif 
+
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+        perror("socket");
+        return -1;
+    }
+    
+    int opt = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        close(server_fd);
+        return -1;
+    }
+
+    if (setsockopt(server_fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt (keepalive)");
+        close(server_fd);
+        return -1;
+    }
+    
+    *sfdG = server_fd;
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(port);
+
+    if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+        perror("bind");
+        close(server_fd);
+        return -1;
+    }
+
+    if (listen(server_fd, SOMAXCONN) == -1) {
+        perror("listen");
+        close(server_fd);
+        return -1;
+    }
+
+    printf("-------------------------------------------------------------------------------------\n");
+    printf("MicroForgeHTTP\n");
+    char *server_ip_address = inet_ntoa(server_addr.sin_addr);
+    int server_port = ntohs(server_addr.sin_port);
+    printf("- Version: %.1f\n", 1.0);
+    printf("- IP: %s:%d\n", server_ip_address, server_port);
+#ifdef SSL_ENABLE
+    printf("- SSL: Enabled\n");
+#else
+    printf("- SSL: Disabled\n");
+#endif
+    printf("-------------------------------------------------------------------------------------\n");
+    printf(" LOGS:\n");
+    printf("-------------------------------------------------------------------------------------\n");
+
+    while (1) {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        
+        int client_socket = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
+        if (client_socket < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            perror("accept");
+            continue;
+        }
+        
+        struct timeval timeout;
+        timeout.tv_sec = 30;
+        timeout.tv_usec = 0;
+        
+        if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+            perror("setsockopt (timeout)");
+            close(client_socket);
+            continue;
+        }
+        
+        pid_t pid = fork();
+        if (pid == 0) {
+            close(server_fd);
+            
+#ifdef SSL_ENABLE
+            f(client_socket, ctx);
+#else
+            f(client_socket);
+#endif
+            exit(0);
+        } 
+        else if (pid > 0) {
+            close(client_socket);
+            
+            while (waitpid(-1, NULL, WNOHANG) > 0);
+        } 
+        else {
+            perror("fork");
+            close(client_socket);
+        }
+    }
+
+#ifdef SSL_ENABLE 
+    SSL_CTX_free(ctx);
+#endif 
+    close(server_fd);
+    blocklist_free();
+    return 0;
+}
+
 
 /* 
  * Loads BLOCKLIST (= List with all blocked IP addresses
