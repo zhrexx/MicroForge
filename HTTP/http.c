@@ -1,4 +1,21 @@
+/*
+ *  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ *  ┃ Project:  MicroForgeHTTP                   ┃
+ *  ┃ File:     http.c                           ┃
+ *  ┃ Author:   zhrexx                           ┃
+ *  ┃ License:  NovaLicense                      ┃
+ *  ┃━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┃     
+ *  ┃ MFH is a WebAPI and HTTP server library.   ┃
+ *  ┃ Its Fast and simple to use.                ┃
+ *  ┃ It has it own features which other servers ┃
+ *  ┃ don't have, Were trying to create our own  ┃
+ *  ┃ API which would add some features but same ┃
+ *  ┃ times be compatible with all Browsers      ┃
+ *  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
 #include "hapi.h"
+#include "htengine.h"
 
 #ifndef S_PORT 
 #define S_PORT 8080
@@ -27,6 +44,9 @@ int handle_routes(int client_socket, HTTP_Request req, SSL *ssl) {
 #else 
 int handle_routes(int client_socket, HTTP_Request req) {
 #endif
+    HtmlTemplate *tmpl = ht_create();
+    ht_set_var(tmpl, str_format("%s_version", SERVER_API_NAME), str_format("%.1f", SERVER_API_VERSION));
+
     char file_path[512];
     if (hapi_f(&req, client_socket)) {
         return 0;
@@ -34,20 +54,21 @@ int handle_routes(int client_socket, HTTP_Request req) {
     if (http_check_route(req.route, "/")) {
         strcpy(file_path, "index.html");
     } else if (http_check_route(req.route, "/server_info") || http_check_route(req.route, "/server_info/")) {
+        char *sic = str_format("<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP %.1f</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", SERVER_API_VERSION);
 #ifdef SSL_ENABLE
-        http_send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", ssl);
+        http_send_response(client_socket, "200 OK", sic, ssl);
 #else
-        http_send_response(client_socket, "200 OK", "<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>");
+        http_send_response(client_socket, "200 OK", sic);
 #endif
         return 1;
     } else {
         snprintf(file_path, sizeof(file_path), "%s", req.route + 1);
     }
-
+    
 #ifdef SSL_ENABLE
-    http_send_file_response(client_socket, "200 OK", file_path, ssl);
+    http_send_file_response(client_socket, "200 OK", file_path, tmpl, ssl);
 #else
-    http_send_file_response(client_socket, "200 OK", file_path);
+    http_send_file_response(client_socket, "200 OK", file_path, tmpl);
 #endif
 
     return 0;

@@ -1,4 +1,18 @@
-// HAPI = HTTP API
+/*
+ *  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ *  ┃ Project:  MicroForgeHTTP                   ┃
+ *  ┃ File:     hapi.h                           ┃
+ *  ┃ Author:   zhrexx                           ┃
+ *  ┃ License:  NovaLicense                      ┃
+ *  ┃━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┃     
+ *  ┃ MFH is a WebAPI and HTTP server library.   ┃
+ *  ┃ Its Fast and simple to use.                ┃
+ *  ┃ It has it own features which other servers ┃
+ *  ┃ don't have, Were trying to create our own  ┃
+ *  ┃ API which would add some features but same ┃
+ *  ┃ times be compatible with all Browsers      ┃
+ *  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
 
 #ifndef HAPI_H
 #define HAPI_H
@@ -17,7 +31,7 @@
 #include <stdbool.h>
 #include <sys/wait.h>
 #include <errno.h>
-
+#include "htengine.h"
 #ifdef SSL_ENABLE
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -29,7 +43,9 @@
 #define BLOCKLIST_MAX_LINES 1024
 #define BLOCKLIST_MAX_TOKENS 256
 #define BLOCKLIST_MAX_LENGTH 1024
+
 #define SERVER_API_NAME "mfh"
+#define SERVER_API_VERSION 1.0
 
 typedef enum {
     HM_GET,
@@ -68,10 +84,10 @@ static int block_count = 0;
 #ifdef SSL_ENABLE
 typedef void (*handle_client_f)(int, SSL *);
 void http_send_response(int client_socket, const char *status, const char *content, SSL *ssl);
-void http_send_file_response(int client_socket, char *status, const char *filepath, SSL *ssl);
+void http_send_file_response(int client_socket, char *status, const char *filepath, HtmlTemplate *tmpl, SSL *ssl);
 #else
 typedef void (*handle_client_f)(int);
-void http_send_file_response(int client_socket, char *status, const char *filepath);
+void http_send_file_response(int client_socket, char *status, const char *filepath, HtmlTemplate *tmpl);
 void http_send_response(int client_socket, const char *status, const char *content);
 #endif
 int blocklist_load(const char *filename);
@@ -632,9 +648,9 @@ void http_send_response(int client_socket, const char *status, const char *conte
 }
 
 #ifdef SSL_ENABLE
-void http_send_file_response(int client_socket, char *status, const char *filepath, SSL *ssl) {
+void http_send_file_response(int client_socket, char *status, const char *filepath, HtmlTemplate *tmpl, SSL *ssl) {
 #else 
-void http_send_file_response(int client_socket, char *status, const char *filepath) {
+void http_send_file_response(int client_socket, char *status, const char *filepath, HtmlTemplate *tmpl) {
 #endif
     FILE *fp = fopen(filepath, "rb");
     if (!fp) {
@@ -699,23 +715,28 @@ void http_send_file_response(int client_socket, char *status, const char *filepa
     
     free(header);
 
-    char *buffer = malloc(R_BUFFER_SIZE);
+    char *buffer = malloc(file_size + 1);
     if (!buffer) {
         fclose(fp);
         return;
     }
-
-    size_t bytes_read;
-    while ((bytes_read = fread(buffer, 1, R_BUFFER_SIZE, fp)) > 0) {
-#ifdef SSL_ENABLE
-        SSL_write(ssl, buffer, bytes_read);
-#else
-        send(client_socket, buffer, bytes_read, 0);
-#endif
-    }
     
-    free(buffer);
+    fread(buffer, 1, file_size, fp);
+    buffer[file_size] = '\0';
     fclose(fp);
+
+    char *rendered = ht_render(tmpl, buffer);
+    ht_destroy(tmpl);
+    free(buffer);
+
+    if (rendered) {
+#ifdef SSL_ENABLE
+        SSL_write(ssl, rendered, strlen(rendered));
+#else
+        send(client_socket, rendered, strlen(rendered), 0);
+#endif
+        ht_free_rendered(rendered);
+    }
 }
 
 extern void handle_signal(int);
@@ -793,7 +814,7 @@ int http_run_server(int port, int *sfdG, handle_client_f f) {
     printf("MicroForgeHTTP\n");
     char *server_ip_address = inet_ntoa(server_addr.sin_addr);
     int server_port = ntohs(server_addr.sin_port);
-    printf("- Version: %.1f\n", 1.0);
+    printf("- Version: %.1f\n", SERVER_API_VERSION);
     printf("- IP: %s:%d\n", server_ip_address, server_port);
 #ifdef SSL_ENABLE
     printf("- SSL: Enabled\n");
