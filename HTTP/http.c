@@ -168,12 +168,11 @@ void handle_client(int client_socket
 
 
 #ifdef SSL_ENABLE 
-    if (handle_routes(client_socket, req, ssl)) {
+    handle_routes(client_socket, req, ssl);
 #else 
-    if (handle_routes(client_socket, req)) {
+    handle_routes(client_socket, req);
 #endif
-        goto cleanup;
-    }
+
 
 cleanup:
     hapi_free_cookies(&req);
