@@ -16,6 +16,7 @@
 
 #include "hapi.h"
 #include "htengine.h"
+#include "config.h"
 
 #ifndef S_PORT 
 #define S_PORT 8080
@@ -58,7 +59,7 @@ int handle_routes(int client_socket, HTTP_Request req) {
     if (http_check_route(req.route, "/")) {
         strcpy(file_path, "index.html");
     } else if (http_check_route(req.route, "/server_info") || http_check_route(req.route, "/server_info/")) {
-        char *sic = str_format("<!DOCTYPE html>This is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP %.1f</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", SERVER_API_VERSION);
+        char *sic = str_format("<!DOCTYPE html>%sThis is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP %.1f</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", mf_logo, SERVER_API_VERSION);
 #ifdef SSL_ENABLE
         http_send_response(client_socket, "200 OK", sic, ssl);
 #else
