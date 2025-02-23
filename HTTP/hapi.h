@@ -46,6 +46,9 @@
 
 #define SERVER_API_NAME "mfh"
 #define SERVER_API_VERSION 1.0
+#ifndef GIT_HASH
+#define GIT_HASH "No Git Hash given"
+#endif
 
 typedef enum {
     HM_GET,
@@ -837,6 +840,7 @@ int http_run_server(int port, int *sfdG, handle_client_f f) {
     char *server_ip_address = inet_ntoa(server_addr.sin_addr);
     int server_port = ntohs(server_addr.sin_port);
     printf("- Version: %.1f\n", SERVER_API_VERSION);
+    printf("- Git Hash: %s\n", GIT_HASH);
     printf("- IP: %s:%d\n", server_ip_address, server_port);
 #ifdef SSL_ENABLE
     printf("- SSL: Enabled\n");
