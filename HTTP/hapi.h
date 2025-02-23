@@ -82,7 +82,7 @@ static char **blocklist = NULL;
 static int block_count = 0;
 
 #ifdef SSL_ENABLE
-typedef void (*handle_client_f)(int, SSL *);
+typedef void (*handle_client_f)(int, SSL_CTX *);
 void http_send_response(int client_socket, const char *status, const char *content, SSL *ssl);
 void http_send_file_response(int client_socket, char *status, const char *filepath, HtmlTemplate *tmpl, SSL *ssl);
 #else
@@ -422,40 +422,62 @@ void hapi_free_cookies(HTTP_Request *req) {
 
 // Feature section
 // f = feature 
-
+#ifdef SSL_ENABLE 
+int hapi_f_time(HTTP_Request *req, int client_socket, SSL *ssl) {
+#else
 int hapi_f_time(HTTP_Request *req, int client_socket) {
+#endif
     if (http_check_route(req->route, str_format("/%s/f/time", SERVER_API_NAME)) || http_check_route(req->route, str_format("/%s/f/time/", SERVER_API_NAME)) ) {
+#ifdef SSL_ENABLE
+        http_send_response(client_socket, "200 OK", str_format("%d", time(NULL)), ssl);
+#else 
         http_send_response(client_socket, "200 OK", str_format("%d", time(NULL)));
+#endif
         return 1;
     } else {
         return 0;
     }
 }
 
+#ifdef SSL_ENABLE
+int hapi_f_token(HTTP_Request *req, int client_socket, SSL *ssl) {
+#else
 int hapi_f_token(HTTP_Request *req, int client_socket) {
+#endif
     if (http_check_route(req->route, str_format("/%s/f/token", SERVER_API_NAME)) || http_check_route(req->route, str_format("/%s/f/token/", SERVER_API_NAME)) ) {
+#ifdef SSL_ENABLE
+        http_send_response(client_socket, "200 OK", str_format("%s", token_generate()), ssl);
+#else
         http_send_response(client_socket, "200 OK", str_format("%s", token_generate()));
+#endif 
         return 1;
     } else {
         return 0;
     }
 }
 
-
+#ifdef SSL_ENABLE
+typedef int (*hapi_f_function)(HTTP_Request *, int, SSL *);
+int hapi_f(HTTP_Request *req, int client_socket, SSL *ssl) {
+#else
 typedef int (*hapi_f_function)(HTTP_Request *, int);
 int hapi_f(HTTP_Request *req, int client_socket) {
+#endif
     hapi_f_function functions[2] = {
         hapi_f_token,
         hapi_f_time
     };
     for (size_t i = 0; i < 2; i++) {
+#ifdef SSL_ENABLE
+        if (functions[i](req, client_socket, ssl)) {
+#else
         if (functions[i](req, client_socket)) {
+#endif
             return 1;
         }
     }
     return 0;
 }
-
 
 /*
  * Parsing Cookies

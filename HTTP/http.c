@@ -48,7 +48,11 @@ int handle_routes(int client_socket, HTTP_Request req) {
     ht_set_var(tmpl, str_format("%s_version", SERVER_API_NAME), str_format("%.1f", SERVER_API_VERSION));
 
     char file_path[512];
+#ifdef SSL_ENABLE 
+    if (hapi_f(&req, client_socket, ssl)) {
+#else 
     if (hapi_f(&req, client_socket)) {
+#endif
         return 0;
     }
     if (http_check_route(req.route, "/")) {
@@ -173,8 +177,6 @@ void handle_client(int client_socket
     handle_routes(client_socket, req);
 #endif
 
-
-cleanup:
     hapi_free_cookies(&req);
     free(req.host);
     free(req.route);
