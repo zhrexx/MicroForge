@@ -693,7 +693,7 @@ void http_send_file_response(int client_socket, char *status, const char *filepa
     fseek(fp, 0, SEEK_SET);
     
     const char *mime_type = mime_type_get(filepath);
-    
+
     char *cookie_header = NULL;
     char *session_token = token_generate();
     if (session_token) {
@@ -740,27 +740,40 @@ void http_send_file_response(int client_socket, char *status, const char *filepa
     
     free(header);
 
-    char *buffer = malloc(file_size + 1);
-    if (!buffer) {
+    if (strncmp(mime_type, "text/", 5) == 0 || strcmp(mime_type, "application/json") == 0) {
+        char *buffer = malloc(file_size + 1);
+        if (!buffer) {
+            fclose(fp);
+            return;
+        }
+
+        fread(buffer, 1, file_size, fp);
+        buffer[file_size] = '\0';
         fclose(fp);
-        return;
-    }
-    
-    fread(buffer, 1, file_size, fp);
-    buffer[file_size] = '\0';
-    fclose(fp);
 
-    char *rendered = ht_render(tmpl, buffer);
-    ht_destroy(tmpl);
-    free(buffer);
+        char *rendered = ht_render(tmpl, buffer);
+        ht_destroy(tmpl);
+        free(buffer);
 
-    if (rendered) {
+        if (rendered) {
 #ifdef SSL_ENABLE
-        SSL_write(ssl, rendered, strlen(rendered));
+            SSL_write(ssl, rendered, strlen(rendered));
 #else
-        send(client_socket, rendered, strlen(rendered), 0);
+            send(client_socket, rendered, strlen(rendered), 0);
 #endif
-        ht_free_rendered(rendered);
+            ht_free_rendered(rendered);
+        }
+    } else {
+        char file_buffer[4096];
+        size_t bytes_read;
+        while ((bytes_read = fread(file_buffer, 1, sizeof(file_buffer), fp)) > 0) {
+#ifdef SSL_ENABLE
+            SSL_write(ssl, file_buffer, bytes_read);
+#else
+            send(client_socket, file_buffer, bytes_read, 0);
+#endif
+        }
+        fclose(fp);
     }
 }
 
