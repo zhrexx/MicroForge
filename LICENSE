@@ -1,0 +1,39 @@
+# Code Guardian License (CGL)
+
+Copyright (c) 2025 zhrexx i.e. Jan Moretz
+
+Permission is hereby granted, free of charge, to any person or entity obtaining a copy of this software and associated documentation files (the "Software"), except for entities meeting the Exclusion Criteria defined below, to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+## Exclusion Criteria
+This license explicitly excludes:
+1. Google LLC and all related subsidiaries
+2. Microsoft Corporation and all related subsidiaries
+3. Meta Platforms, Inc. (formerly Facebook) and all related subsidiaries
+4. Amazon.com, Inc. and all related subsidiaries
+5. Apple Inc. and all related subsidiaries
+6. OpenAI, Inc. and all related subsidiaries
+7. Oracle Corporation and all related subsidiaries
+8. IBM Corporation and all related subsidiaries
+9. Salesforce, Inc. and all related subsidiaries
+10. Alphabet Inc. and all related subsidiaries
+11. Any company with annual revenue exceeding 1 billion USD that has demonstrably used source code without appropriate attribution
+12. Any entity acting as an agent, contractor, or partner of the above organizations when such activity relates to the Software
+
+## Transparency Clause
+Any entity using the Software must:
+1. Clearly document the use of the Software
+2. Acknowledge authorship
+3. Provide a link to the original repository for derivative works
+
+## Conditions
+For all permitted users:
+
+1. The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+2. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Legal Notice
+This license is intended to be legally enforceable. If any provision of this license is held to be unenforceable or invalid, that provision will be enforced to the maximum extent possible, and the other provisions will remain in full force and effect.
+
+## License Compatibility
+This license is not automatically compatible with other open source licenses. Users wishing to combine this Software with other software under different licenses must ensure compliance with both licenses.
