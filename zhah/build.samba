@@ -1,0 +1,3 @@
+default:
+    enable_verbose();
+    compile("main.c", "main");
