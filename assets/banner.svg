@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400">
+  <defs>
+    <linearGradient id="meshGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#121212"/>
+      <stop offset="50%" stop-color="#1E1E1E"/>
+      <stop offset="100%" stop-color="#0A0A0A"/>
+    </linearGradient>
+    
+    <pattern id="geometricPattern" patternUnits="userSpaceOnUse" width="100" height="100" patternTransform="rotate(45)">
+      <rect width="50" height="50" fill="rgba(255,255,255,0.02)"/>
+      <rect x="50" y="50" width="50" height="50" fill="rgba(255,255,255,0.02)"/>
+    </pattern>
+  </defs>
+  
+  <rect width="1200" height="400" fill="url(#meshGradient)"/>
+  <rect width="1200" height="400" fill="url(#geometricPattern)"/>
+  
+  <g stroke="#333" stroke-opacity="0.3">
+    <line x1="0" y1="200" x2="1200" y2="200" stroke-dasharray="5,5"/>
+    <line x1="600" y1="0" x2="600" y2="400" stroke-dasharray="5,5"/>
+  </g>
+  
+  <g transform="translate(100, 100) scale(0.7)">
+    <path d="M50,20 L150,20 L200,100 L150,180 L50,180 Z" 
+          fill="rgba(57, 134, 255, 0.2)" 
+          stroke="#3986FF" 
+          stroke-width="3"/>
+    <path d="M100,50 L150,100 L100,150" 
+          fill="none" 
+          stroke="#3986FF" 
+          stroke-width="4" 
+          stroke-linecap="round"/>
+  </g>
+  
+  <text x="350" y="200" 
+        font-family="'Inter', Arial, sans-serif" 
+        font-size="80" 
+        font-weight="700" 
+        fill="#FFFFFF">
+    MicroForge
+  </text>
+  
+  <text x="350" y="260" 
+        font-family="'Inter', Arial, sans-serif" 
+        font-size="30" 
+        font-weight="300" 
+        fill="rgba(255,255,255,0.7)">
+    Library Collection
+  </text>
+  
+  <g fill="rgba(57, 134, 255, 0.1)" stroke="#3986FF" stroke-width="2">
+    <circle cx="1100" cy="100" r="40" opacity="0.5"/>
+    <circle cx="1050" cy="300" r="25" opacity="0.3"/>
+    <circle cx="1150" cy="250" r="15" opacity="0.2"/>
+  </g>
+</svg>

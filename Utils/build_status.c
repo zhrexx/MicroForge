@@ -1,3 +1,13 @@
+/*
+ *  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ *  ┃ Project:  Build Status                     ┃
+ *  ┃ File:     build_status.h                   ┃
+ *  ┃ Author:   zhrexx                           ┃
+ *  ┃ License:  NovaLicense                      ┃
+ *  ┃━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┃     
+ *  ┃ Generates a build report based on repos    ┃
+ *  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */ 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

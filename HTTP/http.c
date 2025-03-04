@@ -58,14 +58,6 @@ int handle_routes(int client_socket, HTTP_Request req) {
     }
     if (http_check_route(req.route, "/")) {
         strcpy(file_path, "index.html");
-    } else if (http_check_route(req.route, "/server_info") || http_check_route(req.route, "/server_info/")) {
-        char *sic = str_format("<!DOCTYPE html>%sThis is running on <a href=\"https://github.com/zhrexx/MicroForge/tree/main/HTTP\">MicroForge/HTTP %.1f</a> created by <a href=\"https://github.com/zhrexx\">zhrexx</a>", mf_logo, SERVER_API_VERSION);
-#ifdef SSL_ENABLE
-        http_send_response(client_socket, "200 OK", sic, ssl);
-#else
-        http_send_response(client_socket, "200 OK", sic);
-#endif
-        return 1;
     } else {
         snprintf(file_path, sizeof(file_path), "%s", req.route + 1);
     }
