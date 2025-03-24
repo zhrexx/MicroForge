@@ -35,7 +35,7 @@ local config = {
 }
 
 local i = 1
-while i <= #arg do
+while arg and i <= #arg do
     if arg[i] == "-i" or arg[i] == "--input" then
         config.inputFile = arg[i+1]
         i = i + 2
