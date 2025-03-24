@@ -102,6 +102,157 @@ local function parseInputFile(filename)
     return content
 end
 
+local preprocessor = {
+    defines = {},
+    includePaths = {"./"},
+    conditionalStack = {}
+}
+
+local function handlePreprocessorDirective(line)
+    local directive, operands = line:match("^!([%w_]+)%s*(.*)$")
+    if not directive then return line end
+    
+    directive = directive:lower()
+    log("Preprocessing directive: !" .. directive .. " " .. operands, colors.yellow)
+    
+    if directive == "define" then
+        local name, value = operands:match("^([%w_]+)%s*(.*)$")
+        if name then
+            preprocessor.defines[name] = value or ""
+            log("Defined " .. name .. " = '" .. (value or "") .. "'", colors.yellow)
+        else
+            errorExit("Invalid !define syntax: " .. line)
+        end
+        return ""
+    elseif directive == "undef" then
+        local name = operands:match("^([%w_]+)%s*$")
+        if name then
+            preprocessor.defines[name] = nil
+            log("Undefined " .. name, colors.yellow)
+        else
+            errorExit("Invalid !undef syntax: " .. line)
+        end
+        return ""
+    elseif directive == "ifdef" or directive == "ifndef" then
+        local name = operands:match("^([%w_]+)%s*$")
+        if name then
+            local isDefined = preprocessor.defines[name] ~= nil
+            if directive == "ifndef" then isDefined = not isDefined end
+            table.insert(preprocessor.conditionalStack, isDefined)
+            log("Conditional " .. directive .. " " .. name .. ": " .. tostring(isDefined), colors.yellow)
+        else
+            errorExit("Invalid " .. directive .. " syntax: " .. line)
+        end
+        return ""
+    elseif directive == "else" then
+        if #preprocessor.conditionalStack > 0 then
+            preprocessor.conditionalStack[#preprocessor.conditionalStack] = 
+                not preprocessor.conditionalStack[#preprocessor.conditionalStack]
+            log("Conditional else: " .. tostring(preprocessor.conditionalStack[#preprocessor.conditionalStack]), colors.yellow)
+        else
+            errorExit("!else without matching !ifdef/!ifndef")
+        end
+        return ""
+    elseif directive == "endif" then
+        if #preprocessor.conditionalStack > 0 then
+            table.remove(preprocessor.conditionalStack)
+            log("Conditional endif", colors.yellow)
+        else
+            errorExit("!endif without matching !ifdef/!ifndef")
+        end
+        return ""
+    elseif directive == "include" then
+        local filename = operands:match("^\"([^\"]+)\"$")
+        if not filename then
+            filename = operands:match("^<([^>]+)>$")
+        end
+        
+        if filename then
+            local content = ""
+            local found = false
+            
+            for _, path in ipairs(preprocessor.includePaths) do
+                local fullPath = path .. "/" .. filename
+                local file = io.open(fullPath, "r")
+                if file then
+                    content = file:read("*all")
+                    file:close()
+                    found = true
+                    log("Included file: " .. fullPath, colors.yellow)
+                    break
+                end
+            end
+            
+            if not found then
+                errorExit("Could not find include file: " .. filename)
+            end
+            
+            return content
+        else
+            errorExit("Invalid !include syntax: " .. line)
+        end
+    elseif directive == "includepath" then
+        local path = operands:match("^\"([^\"]+)\"$")
+        if path then
+            table.insert(preprocessor.includePaths, path)
+            log("Added include path: " .. path, colors.yellow)
+        else
+            errorExit("Invalid !includepath syntax: " .. line)
+        end
+        return ""
+    else
+        errorExit("Unknown preprocessor directive: !" .. directive)
+    end
+    
+    return ""
+end
+
+local function preprocessContent(content)
+    local lines = {}
+    local result = {}
+    
+    for line in content:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+    
+    log("Preprocessing " .. #lines .. " lines")
+    
+    for _, line in ipairs(lines) do
+        local trimmed = line:match("^%s*(.-)%s*$")
+        
+        if trimmed:match("^!") then
+            local processedLine = handlePreprocessorDirective(trimmed)
+            if processedLine and #processedLine > 0 then
+                for subline in processedLine:gmatch("[^\r\n]+") do
+                    table.insert(result, subline)
+                end
+            end
+        else
+            local isSkipped = false
+            for _, active in ipairs(preprocessor.conditionalStack) do
+                if not active then
+                    isSkipped = true
+                    break
+                end
+            end
+            
+            if not isSkipped then
+                for name, value in pairs(preprocessor.defines) do
+                    line = line:gsub("%$" .. name, value)
+                end
+                
+                table.insert(result, line)
+            end
+        end
+    end
+    
+    if #preprocessor.conditionalStack > 0 then
+        errorExit("Unclosed conditional directive (!ifdef/!ifndef without matching !endif)")
+    end
+    
+    return table.concat(result, "\n")
+end
+
 local function optimizeCode(lines)
     if not config.optimize then return lines end
     
@@ -153,7 +304,6 @@ local function extractDataLabels(content)
     return data_labels
 end
 
--- TODO: Add more builtins
 local function substituteBuiltins(line, data_labels)
     line = line:gsub("strlen%(([%w_]+)%)", function(label)
         local str = data_labels[label]
@@ -270,6 +420,7 @@ local function main()
     print("")
     
     local content = parseInputFile(config.inputFile)
+    content = preprocessContent(content)
     local processed = processContent(content)
     writeOutputFile(config.outputFile, processed)
     

@@ -1,13 +1,10 @@
+!include "libxam.xam"
+
 __entry:
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, message
-    mov rdx, strlen(message) + 1
-    syscall
-    
+    call lx_hello_world
+
     mov rax, 60
     xor rdi, rdi
     syscall
 
-message: db 'Hello, World!', 10
 
