@@ -73,6 +73,10 @@ int safe_lua_loader(lua_State* L, const char* filename);
 void enhanced_package_loader(lua_State* L);
 
 int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        print_help();
+        return 1;
+    }
     RunnerConfig config = parse_arguments(argc, argv);
 
     if (config.verbose) {
@@ -123,7 +127,6 @@ int main(int argc, char* argv[]) {
         restore_output();
     }
 
-    //lua_close(L);
     return EXIT_SUCCESS;
 }
 
@@ -142,12 +145,17 @@ int safe_lua_loader(lua_State* L, const char* filename) {
 }
 
 void enhanced_package_loader(lua_State* L) {
+    lua_settop(L, 0);
     lua_getglobal(L, "package");
     lua_getfield(L, -1, "loaders");
-    
+    if (!lua_istable(L, -1)) {
+        fprintf(stderr, "Error: package.loaders is not a table\n");
+        lua_pop(L, 2);
+        return;
+    }
+    int loader_count = lua_rawlen(L, -1);
     lua_pushcfunction(L, (lua_CFunction)safe_lua_loader);
-    lua_rawseti(L, -2, 1);
-    
+    lua_rawseti(L, -2, loader_count + 1);
     lua_pop(L, 2);
 }
 

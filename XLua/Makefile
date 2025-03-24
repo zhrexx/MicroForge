@@ -1,3 +1,3 @@
 
 all:
-	gcc xlua.c -o ../xlua -llua -lm
+	gcc xlua.c -o ../xlua -llua -lm -g -ggdb
