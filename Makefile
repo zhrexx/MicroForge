@@ -2,7 +2,7 @@ IGNORE_DIRS = xam XLua
 SOURCES = $(shell find . -type d \( -name xam -o -name XLua \) -prune -o -name "*.c" -print)
 EXEC_NAMES = $(notdir $(SOURCES:.c=))
 EXECS = $(addprefix ./,$(EXEC_NAMES))
-GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_HASH := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -static -DGIT_HASH='"$(GIT_HASH)"'
 RM = rm -f

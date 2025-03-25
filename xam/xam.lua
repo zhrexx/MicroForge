@@ -1,5 +1,6 @@
 #!/usr/bin/env lua
 
+local xam = {}
 local colors = {
     reset = "\27[0m",
     red = "\27[31m",
@@ -26,10 +27,15 @@ local function printBanner()
     io.write(colors.cyan, "Your Favorite Assembler v1.0", colors.reset, "\n\n")
 end
 
+function xam:OS()
+    return package.config:sub(1,1) == "\\" and "win" or "unix"
+end
+
 local config = {
     inputFile = "input.xam",
     outputFile = "output.fasm",
     entryPoint = "__entry",
+    target = (xam:OS() == "win") and "win" or "linux",
     verbose = false,
     optimize = false
 }
@@ -51,15 +57,19 @@ while arg and i <= #arg do
     elseif arg[i] == "--optimize" then
         config.optimize = true
         i = i + 1
+    elseif arg[i] == "--target" then 
+        config.target = arg[i+1]
+        i = i + 2
     elseif arg[i] == "-h" or arg[i] == "--help" then
         printBanner()
         print("Usage: xam [options]")
         print("Options:")
-        print("  -i, --input FILE     Input assembly file (default: input.asm)")
-        print("  -o, --output FILE    Output FASM file (default: output.asm)")
+        print("  -i, --input FILE     Input assembly file (default: input.xam)")
+        print("  -o, --output FILE    Output FASM file (default: output.fasm)")
         print("  -e, --entry LABEL    Entry point label (default: __entry)")
         print("  -v, --verbose        Enable verbose output")
         print("  --optimize           Enable basic optimizations")
+        print("  --target TARGET_OS   Set a target os");
         print("  -h, --help           Show this help message")
         os.exit(0)
     else
@@ -69,13 +79,28 @@ while arg and i <= #arg do
     end
 end
 
-local header = string.format([[
+local function generateHeader()
+    if config.target == "win" then
+        return string.format([[
+format PE64 console
+entry %s
+
+section '.text' code readable executable
+
+]], config.entryPoint)
+    else
+        return string.format([[
 format ELF64 executable 3
 entry %s
 
 segment readable executable
 
 ]], config.entryPoint)
+    end
+end
+
+
+local header = generateHeader()
 
 local function log(msg, color)
     if config.verbose then
@@ -320,6 +345,7 @@ end
 local function processContent(content)
     local lines = {}
     local data_section = {}
+    local bss_section = {} 
     local code_section = {}
     local has_entry = false
     local entry_count = 0
@@ -339,7 +365,8 @@ local function processContent(content)
         
         if #trimmed > 0 then
             local isData = false
-            
+            local isBSS = false
+
             if trimmed:match(":%s*db%s+") or 
                trimmed:match(":%s*dw%s+") or 
                trimmed:match(":%s*dd%s+") or 
@@ -351,10 +378,21 @@ local function processContent(content)
                 isData = true
             end
             
+            if trimmed:match(":%s*resb%s+") or 
+               trimmed:match(":%s*resw%s+") or 
+               trimmed:match(":%s*resd%s+") or 
+               trimmed:match(":%s*resq%s+") then
+                isBSS = true
+            end
+
             if isData then
                 local processed_line = substituteBuiltins(trimmed, data_labels)
                 table.insert(data_section, processed_line)
                 log("DATA: " .. trimmed, colors.magenta)
+            elseif isBSS then
+                local processed_line = substituteBuiltins(trimmed, data_labels)
+                table.insert(bss_section, processed_line)
+                log("BSS: " .. trimmed, colors.blue)
             else
                 local processed_line = substituteBuiltins(trimmed, data_labels)
                 
@@ -382,14 +420,23 @@ local function processContent(content)
     if config.optimize then
         code_section = optimizeCode(code_section)
         data_section = optimizeCode(data_section)
+        bss_section = optimizeCode(bss_section)
     end
     
     local output = header
     output = output .. table.concat(code_section, "\n") .. "\n\n"
     
-    if #data_section > 0 then
+    if #data_section > 0 or #bss_section > 0 then
         output = output .. "segment readable writeable\n\n"
-        output = output .. table.concat(data_section, "\n") .. "\n"
+
+        if #data_section > 0 then
+            output = output .. table.concat(data_section, "\n") .. "\n"
+        end
+        
+        if #bss_section > 0 then
+            output = output .. table.concat(bss_section, "\n") .. "\n"
+        end
+
     end
     
     log("Generated " .. #code_section .. " code lines and " .. #data_section .. " data lines")
