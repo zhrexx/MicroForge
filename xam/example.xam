@@ -3,12 +3,8 @@
 
 hello_world: db 'Hello World!', 10, 0
 __entry:
-    mov rdi, hello_world 
-    call printf
+    xor rdi, rdi 
+    call exit
 
-    mov rax, 60
-    xor rdi, rdi
-    syscall
-
-example: resb 10
+example: rb 10
 

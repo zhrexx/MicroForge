@@ -1,4 +1,8 @@
 
+
+; Registers
+_ra_ dq 0
+
 _format:
     push rbp
     mov rbp, rsp

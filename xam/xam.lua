@@ -1,5 +1,7 @@
 #!/usr/bin/env lua
 
+-- TODO: add 32 bit maybe
+
 local xam = {}
 local colors = {
     reset = "\27[0m",
@@ -126,6 +128,7 @@ local function parseInputFile(filename)
     
     return content
 end
+
 
 local preprocessor = {
     defines = {},
@@ -370,20 +373,16 @@ local function processContent(content)
             if trimmed:match(":%s*db%s+") or 
                trimmed:match(":%s*dw%s+") or 
                trimmed:match(":%s*dd%s+") or 
-               trimmed:match(":%s*dq%s+") or
-               trimmed:match(":%s*rb%s+") or
-               trimmed:match(":%s*rw%s+") or
-               trimmed:match(":%s*rd%s+") or
-               trimmed:match(":%s*rq%s+") then
+               trimmed:match(":%s*dq%s+") then 
                 isData = true
             end
             
-            if trimmed:match(":%s*resb%s+") or 
-               trimmed:match(":%s*resw%s+") or 
-               trimmed:match(":%s*resd%s+") or 
-               trimmed:match(":%s*resq%s+") then
-                isBSS = true
-            end
+            if trimmed:match(":%s*rb%s+") or
+               trimmed:match(":%s*rw%s+") or
+               trimmed:match(":%s*rd%s+") or
+               trimmed:match(":%s*rq%s+") then
+                isBSS = true     
+            end 
 
             if isData then
                 local processed_line = substituteBuiltins(trimmed, data_labels)
