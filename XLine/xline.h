@@ -66,6 +66,7 @@ typedef struct {
     int current_completion;
     KeyBinding key_bindings[MAX_KEYBINDINGS];
     int key_binding_count;
+    const char* prompt;
 } LineState;
 
 typedef struct {
@@ -155,6 +156,10 @@ static void print_colored_prompt(const char* prompt, XLineColor color);
 static void handle_completion(LineState* line_state);
 static void kill_to_end(LineState* line_state);
 static void kill_to_start(LineState* line_state);
+static void handle_left(void* context);
+static void handle_right(void* context);
+static void handle_up(void* context);
+static void handle_down(void* context);
 
 static void print_colored_prompt(const char* prompt, XLineColor color) {
     printf("%s%s%s", g_xline_state.color_codes[color], prompt, g_xline_state.color_codes[XLINE_COLOR_DEFAULT]);
@@ -311,12 +316,14 @@ static int read_key(void) {
     if (ch == 224 || ch == 0) {
         ch = _getch();
         switch (ch) {
-            case 72: return 'U';
-            case 80: return 'D';
-            case 75: return 'L';
-            case 77: return 'R';
-            case 83: return 127;
+            case 72: return XLINE_KEY_UP;
+            case 80: return XLINE_KEY_DOWN;
+            case 75: return XLINE_KEY_LEFT;
+            case 77: return XLINE_KEY_RIGHT;
+            case 83: return XLINE_KEY_DELETE;
         }
+    } else if (ch == 8) {
+        return XLINE_KEY_BACKSPACE;
     }
     return ch;
 #else
@@ -326,15 +333,17 @@ static int read_key(void) {
     if ((ch = getchar()) == 27) {
         if (getchar() == '[') {
             switch (getchar()) {
-                case 'A': return 'U';
-                case 'B': return 'D';
-                case 'C': return 'R';
-                case 'D': return 'L';
+                case 'A': return XLINE_KEY_UP;
+                case 'B': return XLINE_KEY_DOWN;
+                case 'C': return XLINE_KEY_RIGHT;
+                case 'D': return XLINE_KEY_LEFT;
                 case '3': 
-                    getchar();
-                    return 127;
+                    getchar(); // Consume '~'
+                    return XLINE_KEY_DELETE;
             }
         }
+    } else if (ch == 127) {
+        return XLINE_KEY_BACKSPACE;
     }
     return ch;
 #endif
@@ -382,10 +391,83 @@ void xline_clear_history(void) {
     free_history();
 }
 
+static void handle_left(void* context) {
+    LineState* line_state = (LineState*)context;
+    if (line_state->cursor_pos > 0) {
+        line_state->cursor_pos--;
+#ifdef _WIN32
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+        GetConsoleScreenBufferInfo(hStdout, &csbi);
+        csbi.dwCursorPosition.X--;
+        SetConsoleCursorPosition(hStdout, csbi.dwCursorPosition);
+#else
+        printf("\b");
+#endif
+        fflush(stdout);
+    }
+}
+
+static void handle_right(void* context) {
+    LineState* line_state = (LineState*)context;
+    if (line_state->cursor_pos < line_state->buffer_len) {
+        line_state->cursor_pos++;
+#ifdef _WIN32
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+        GetConsoleScreenBufferInfo(hStdout, &csbi);
+        csbi.dwCursorPosition.X++;
+        SetConsoleCursorPosition(hStdout, csbi.dwCursorPosition);
+#else
+        printf("\033[C");
+#endif
+        fflush(stdout);
+    }
+}
+
+static void handle_up(void* context) {
+    LineState* line_state = (LineState*)context;
+    if (line_state->history->current > 0) {
+        line_state->history->current--;
+        const char* entry = line_state->history->entries[line_state->history->current];
+        strncpy(line_state->buffer, entry, MAX_LINE_LENGTH);
+        line_state->buffer_len = strlen(entry);
+        line_state->cursor_pos = line_state->buffer_len;
+        printf("\r\033[K");
+        print_colored_prompt(line_state->prompt, g_xline_state.prompt_color);
+        printf("%s", entry);
+        fflush(stdout);
+    }
+}
+
+static void handle_down(void* context) {
+    LineState* line_state = (LineState*)context;
+    if (line_state->history->current < line_state->history->count - 1) {
+        line_state->history->current++;
+        const char* entry = line_state->history->entries[line_state->history->current];
+        strncpy(line_state->buffer, entry, MAX_LINE_LENGTH);
+        line_state->buffer_len = strlen(entry);
+        line_state->cursor_pos = line_state->buffer_len;
+        printf("\r\033[K");
+        print_colored_prompt(line_state->prompt, g_xline_state.prompt_color);
+        printf("%s", entry);
+        fflush(stdout);
+    } else if (line_state->history->current == line_state->history->count - 1) {
+        line_state->history->current++;
+        line_state->buffer[0] = '\0';
+        line_state->buffer_len = 0;
+        line_state->cursor_pos = 0;
+        printf("\r\033[K");
+        print_colored_prompt(line_state->prompt, g_xline_state.prompt_color);
+        fflush(stdout);
+    }
+}
+
 char* xline_readline(const char* prompt) {
     LineState* line_state = &g_xline_state.line_state;
     memset(line_state, 0, sizeof(LineState));
     line_state->history = &g_xline_state.history;
+    line_state->prompt = prompt;
 
     if (prompt) {
         print_colored_prompt(prompt, g_xline_state.prompt_color);
@@ -400,11 +482,17 @@ char* xline_readline(const char* prompt) {
             printf("%c", ch);
         }
 
+        bool key_handled = false;
         for (int i = 0; i < line_state->key_binding_count; i++) {
             if (line_state->key_bindings[i].key == ch) {
                 line_state->key_bindings[i].handler(line_state->key_bindings[i].context);
+                key_handled = true;
                 break;
             }
+        }
+
+        if (key_handled) {
+            continue;
         }
 
         switch (ch) {
@@ -420,8 +508,7 @@ char* xline_readline(const char* prompt) {
                 line_state->buffer[line_state->buffer_len] = '\0';
                 return strdup(line_state->buffer);
 
-            case 127:
-            case 8:
+            case XLINE_KEY_BACKSPACE:
                 if (line_state->cursor_pos > 0) {
                     printf("\b \b");
                     memmove(&line_state->buffer[line_state->cursor_pos - 1], 
@@ -444,7 +531,22 @@ char* xline_readline(const char* prompt) {
                 }
                 break;
 
-            case 9:
+            case XLINE_KEY_DELETE:
+                if (line_state->cursor_pos < line_state->buffer_len) {
+                    memmove(&line_state->buffer[line_state->cursor_pos], 
+                            &line_state->buffer[line_state->cursor_pos + 1], 
+                            line_state->buffer_len - line_state->cursor_pos);
+                    line_state->buffer_len--;
+                    line_state->buffer[line_state->buffer_len] = '\0';
+                    printf("%s ", line_state->buffer + line_state->cursor_pos);
+                    for (int i = 0; i <= line_state->buffer_len - line_state->cursor_pos; i++) {
+                        printf("\b");
+                    }
+                    fflush(stdout);
+                }
+                break;
+
+            case XLINE_KEY_TAB:
                 handle_completion(line_state);
                 if (line_state->completion_count > 0) {
                     line_state->current_completion = 
@@ -480,6 +582,10 @@ char* xline_readline(const char* prompt) {
 
 void xline_init(void) {
     init_history();
+    xline_add_keybinding(XLINE_KEY_LEFT, handle_left, &g_xline_state.line_state);
+    xline_add_keybinding(XLINE_KEY_RIGHT, handle_right, &g_xline_state.line_state);
+    xline_add_keybinding(XLINE_KEY_UP, handle_up, &g_xline_state.line_state);
+    xline_add_keybinding(XLINE_KEY_DOWN, handle_down, &g_xline_state.line_state);
 }
 
 void xline_cleanup(void) {
