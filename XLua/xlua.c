@@ -1,12 +1,13 @@
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
+#include "deps/lua.h"
+#include "deps/lauxlib.h"
+#include "deps/lualib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <signal.h>
 #include <sys/time.h>
+#include "xstd.h"
 
 #define LUA_GCSETLIMIT 10000
 
@@ -88,6 +89,7 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, COLOR_BRIGHT_RED "Fatal: Could not create Lua state\n" COLOR_RESET);
         return EXIT_FAILURE;
     }
+    xstd_init(L);
 
     global_lua_state = L;
 

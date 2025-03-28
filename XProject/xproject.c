@@ -25,6 +25,7 @@
 #define MAX_TARGETS 64
 #define MAX_SOURCES 128
 #define MAX_DEPENDENCIES 64
+#define MAX_FLAGS 64
 
 #ifdef _WIN32
 #define PATH_SEPARATOR "\\"
@@ -49,11 +50,13 @@ typedef struct {
     char include_paths[MAX_DEPENDENCIES][MAX_PATH];
     char library_paths[MAX_DEPENDENCIES][MAX_PATH];
     char link_libraries[MAX_DEPENDENCIES][MAX_NAME];
+    char custom_cflags[MAX_FLAGS][128];
     TargetType type;
     int source_count;
     int include_count;
     int lib_path_count;
     int link_lib_count;
+    int custom_cflags_count;
 } BuildTarget;
 
 typedef struct {
@@ -132,6 +135,24 @@ int check_utility(const char* utility) {
     snprintf(cmd, sizeof(cmd), "which %s > /dev/null 2>&1", utility);
     #endif
     return system(cmd) == 0;
+}
+
+void add_target_flag(BuildTarget* target, const char* flag) {
+    if (target->custom_cflags_count >= MAX_FLAGS) {
+        log_error("Maximum number of custom flags reached for target %s", target->name);
+    }
+
+    char trimmed_flag[128];
+    sscanf(flag, "%127s", trimmed_flag);
+
+    for (int i = 0; i < target->custom_cflags_count; i++) {
+        if (strcmp(target->custom_cflags[i], trimmed_flag) == 0) {
+            return;
+        }
+    }
+
+    strncpy(target->custom_cflags[target->custom_cflags_count++], 
+            trimmed_flag, sizeof(trimmed_flag) - 1);
 }
 
 int get_file_size(const char* path) {
@@ -304,6 +325,18 @@ void add_link_library(BuildTarget* target, const char* library) {
     strncpy(target->link_libraries[target->link_lib_count++], library, MAX_NAME - 1);
 }
 
+char* build_target_flags(BuildTarget* target) {
+    static char flags[MAX_COMMAND] = {0};
+    flags[0] = '\0';
+
+    for (int i = 0; i < target->custom_cflags_count; i++) {
+        strcat(flags, target->custom_cflags[i]);
+        strcat(flags, " ");
+    }
+
+    return flags;
+}
+
 char* build_include_flags(BuildTarget* target) {
     static char flags[MAX_COMMAND] = {0};
     flags[0] = '\0';
@@ -340,6 +373,9 @@ void compile_target(BuildTarget* target) {
     char cmd[MAX_COMMAND];
     char sources[MAX_COMMAND] = {0};
     char output_path[MAX_PATH];
+    char target_flags[MAX_COMMAND] = {0};
+
+    strcat(target_flags, build_target_flags(target));
 
     create_directory(build_system.output_dir);
 
@@ -353,18 +389,20 @@ void compile_target(BuildTarget* target) {
     switch (target->type) {
         case TARGET_EXECUTABLE:
             #ifdef _WIN32
-            snprintf(cmd, sizeof(cmd), "%s %s %s %s %s %s -o %s.exe", 
+            snprintf(cmd, sizeof(cmd), "%s %s %s %s %s %s %s -o %s.exe", 
                 build_system.compiler, 
                 build_system.cflags, 
+                target_flags,
                 sources, 
                 build_include_flags(target),
                 build_library_flags(target),
                 build_system.ldflags,
                 output_path);
             #else
-            snprintf(cmd, sizeof(cmd), "%s %s %s %s %s %s -o %s", 
+            snprintf(cmd, sizeof(cmd), "%s %s %s %s %s %s %s -o %s", 
                 build_system.compiler, 
                 build_system.cflags, 
+                target_flags,
                 sources, 
                 build_include_flags(target),
                 build_library_flags(target),
@@ -389,20 +427,22 @@ void compile_target(BuildTarget* target) {
             break;
         case TARGET_SHARED_LIB:
             #ifdef _WIN32
-            snprintf(cmd, sizeof(cmd), "%s -shared %s %s %s %s -o %s%s%s.dll", 
+            snprintf(cmd, sizeof(cmd), "%s -shared %s %s %s %s %s -o %s%s%s.dll", 
                 build_system.compiler,
                 sources,
                 build_system.cflags,
+                target_flags,
                 build_include_flags(target),
                 build_library_flags(target),
                 build_system.output_dir,
                 PATH_SEPARATOR,
                 target->name);
             #else
-            snprintf(cmd, sizeof(cmd), "%s -shared %s %s %s %s -o %s%s%s.so", 
+            snprintf(cmd, sizeof(cmd), "%s -shared %s %s %s %s %s -o %s%s%s.so", 
                 build_system.compiler,
                 sources,
                 build_system.cflags,
+                target_flags,
                 build_include_flags(target),
                 build_library_flags(target),
                 build_system.output_dir,
@@ -445,6 +485,13 @@ static int lua_system_command(lua_State* L) {
     const char* command = luaL_checkstring(L, 1);
     lua_pushinteger(L, system_command(command));
     return 1;
+}
+
+static int lua_add_target_flag(lua_State* L) {
+    BuildTarget* target = lua_touserdata(L, 1);
+    const char* flag = luaL_checkstring(L, 2);
+    add_target_flag(target, flag);
+    return 0;
 }
 
 static int lua_create_target(lua_State* L) {
@@ -540,67 +587,36 @@ static int lua_get_platform(lua_State *L) {
     return 1;
 }
 
+static void push_function(lua_State *L, lua_CFunction f, const char *name) {
+    lua_pushcfunction(L, f);
+    lua_setfield(L, -2, name);
+}
+
 void setup_lua_functions(lua_State* L) {
-    // functions
     lua_newtable(L);
 
-    lua_pushcfunction(L, lua_check_library);
-    lua_setfield(L, -2, "check_library");
-
-    lua_pushcfunction(L, lua_check_utility);
-    lua_setfield(L, -2, "check_utility");
-
-    lua_pushcfunction(L, lua_file_exists);
-    lua_setfield(L, -2, "file_exists");
-
-    lua_pushcfunction(L, lua_directory_exists);
-    lua_setfield(L, -2, "directory_exists");
-
-    lua_pushcfunction(L, lua_system_command);
-    lua_setfield(L, -2, "system_command");
-
-    lua_pushcfunction(L, lua_create_target);
-    lua_setfield(L, -2, "create_target");
-
-    lua_pushcfunction(L, lua_add_source);
-    lua_setfield(L, -2, "add_source");
-
-    lua_pushcfunction(L, lua_add_include_path);
-    lua_setfield(L, -2, "add_include_path");
-
-    lua_pushcfunction(L, lua_add_library_path);
-    lua_setfield(L, -2, "add_library_path");
-
-    lua_pushcfunction(L, lua_add_link_library);
-    lua_setfield(L, -2, "add_link_library");
-
-    lua_pushcfunction(L, lua_compile_target);
-    lua_setfield(L, -2, "compile_target");
-
-    lua_pushcfunction(L, lua_get_file_size);
-    lua_setfield(L, -2, "get_file_size");
-
-    lua_pushcfunction(L, lua_read_file);
-    lua_setfield(L, -2, "read_file");
-
-    lua_pushcfunction(L, lua_write_file);
-    lua_setfield(L, -2, "write_file");
-
-    lua_pushcfunction(L, lua_list_directory);
-    lua_setfield(L, -2, "list_directory");
-
-    lua_pushcfunction(L, lua_get_absolute_path);
-    lua_setfield(L, -2, "get_absolute_path");
-
-    lua_pushcfunction(L, lua_hash_file);
-    lua_setfield(L, -2, "hash_file");
-
-    lua_pushcfunction(L, lua_get_platform);
-    lua_setfield(L, -2, "get_platform");
+    push_function(L, lua_check_library, "check_library");
+    push_function(L, lua_check_utility, "check_utility");
+    push_function(L, lua_file_exists, "file_exists");
+    push_function(L, lua_directory_exists, "directory_exists");
+    push_function(L, lua_system_command, "system_command");
+    push_function(L, lua_create_target, "create_target");
+    push_function(L, lua_add_source, "add_source");
+    push_function(L, lua_add_include_path, "add_include_path");
+    push_function(L, lua_add_library_path, "add_library_path");
+    push_function(L, lua_add_link_library, "add_link_library");
+    push_function(L, lua_add_target_flag, "add_target_flag");
+    push_function(L, lua_compile_target, "compile_target");
+    push_function(L, lua_get_file_size, "get_file_size");
+    push_function(L, lua_read_file, "read_file");
+    push_function(L, lua_write_file, "write_file");
+    push_function(L, lua_list_directory, "list_directory");
+    push_function(L, lua_get_absolute_path, "get_absolute_path");
+    push_function(L, lua_hash_file, "hash_file");
+    push_function(L, lua_get_platform, "get_platform");
 
     lua_setglobal(L, "x");
 
-    // variables
     lua_pushinteger(L, TARGET_EXECUTABLE);
     lua_setglobal(L, "TARGET_EXECUTABLE");
     lua_pushinteger(L, TARGET_STATIC_LIB);
@@ -610,10 +626,6 @@ void setup_lua_functions(lua_State* L) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        log_error("Usage: %s <build_script.lua>", argv[0]);
-    }
-
     #ifdef _WIN32
     strcpy(build_system.compiler, "cl");
     strcpy(build_system.cflags, "/W4 /O2");
@@ -630,7 +642,7 @@ int main(int argc, char* argv[]) {
     luaL_openlibs(L);
     setup_lua_functions(L);
 
-    if (luaL_dofile(L, argv[1]) != LUA_OK) {
+    if (luaL_dofile(L, "XProject.lua") != LUA_OK) {
         log_error("Error executing Lua script: %s", lua_tostring(L, -1));
     }
 
