@@ -8,13 +8,28 @@ function log(message) {
 
 function createEvent(eventName) {
     return function(data) {
+        const eventDetails = {
+            ...data,
+            timestamp: Date.now(),
+            renderCount: data && data.elements ? data.elements.length : 0,
+            renderInfo: data && data.elements 
+                ? data.elements.map(elem => ({
+                    tagName: elem.name || 'Unknown',
+                    attributes: elem.attribs ? Object.keys(elem.attribs) : [],
+                    childCount: elem.children ? elem.children.length : 0
+                }))
+                : []
+        };
+
         const event = new CustomEvent(eventName, {
             bubbles: true,
-            detail: data 
+            detail: eventDetails
         });
+
         return event;
     };
 }
+
 
 class Element {
     constructor(name, attribs = {}, ...children) {
@@ -84,6 +99,13 @@ class DOM {
         this.#elements.push(elem);
         return elem;
     }
+    
+    removeElement(name, attribs = {}) {
+        this.#elements = this.#elements.filter(elem => 
+            !(elem.name === name && 
+             Object.keys(attribs).every(key => elem.attribs[key] === attribs[key]))
+        );
+    }
 
     renderAll() {
         if (this.root == null) return;
@@ -96,7 +118,7 @@ class DOM {
             log(`Rendering ${this.#elements.length} elements`);
         }
         const render_event = this.events["render"]({
-            elements: [...this.#elements]
+            elements: [...this.#elements],
         });
         document.getElementById("_xui_events").dispatchEvent(render_event);
 
@@ -176,15 +198,13 @@ let gEvents;
 
 window.onload = () => {
     gDOM.root = document.body;
+   
+    let event_dispacher = new Element("div", {"id": "_xui_events", "style": "display: none; position: absolute;"});
     
-    const eventsContainer = document.createElement('div');
-    eventsContainer.id = '_xui_events';
-    eventsContainer.style.display = 'none';
-    eventsContainer.style.position = 'absolute';
-    document.body.insertBefore(eventsContainer, document.body.firstChild);
-    
-    gEvents = eventsContainer;
+    gEvents = event_dispacher.render();
 
+    document.body.insertBefore(gEvents, document.body.firstChild);
+    
     const rootElement = document.getElementById("root");
     if (rootElement) {
         gDOM.root = rootElement;
