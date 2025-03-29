@@ -30,17 +30,69 @@ function createEvent(eventName) {
     };
 }
 
+// NOTE: uses HTMLDOM because of recursiom
+function getEventDispatcher() {
+    let eventDispatcher = document.getElementById("_xui_events");
+    if (!eventDispatcher) {
+        let event_dispatcher = new Element("div", {"id": "_xui_events", "style": "display: none; position: absolute;"});
+
+        eventDispatcher = event_dispatcher.render();
+        if (document.body) {
+            document.body.insertBefore(eventDispatcher, document.body.firstChild);
+        }
+    }
+    return eventDispatcher;
+}
+
+function hasKeyValue(obj, key, value) {
+  if (!obj || typeof obj !== "object") return false;
+  return obj.hasOwnProperty(key) && obj[key] === value;
+}
+
 class Element {
     constructor(name, attribs = {}, ...children) {
         this.name = name;
         this.attribs = {...attribs};
         this.children = [...children];
-        this.attr = function (key, value) {
+        this._attr = function (key, value) {
             this.attribs[key] = value;
         };
-        this.child = function (child) {
+        this._child = function (child) {
             this.children.push(child);
         };
+
+        this._on = function(eventName, handler) {
+            const existingAttr = this.attribs[`on${eventName}`];
+            if (existingAttr) {
+                const oldHandler = new Function('event', existingAttr);
+                this.attribs[`on${eventName}`] = `(${oldHandler})(event); (${handler})(event);`;
+            } else {
+                this.attribs[`on${eventName}`] = `(${handler})(event)`;
+            }
+            return this;
+        };
+        
+        if (!hasKeyValue(this.attribs, "id", "_xui_events")) {
+            if (document.readyState === "complete" || document.readyState === "interactive") {
+                this.dispatchElementCreationEvent();
+            } else {
+                window.addEventListener("DOMContentLoaded", () => {
+                    this.dispatchElementCreationEvent();
+                });
+            }
+        }
+    }
+
+    dispatchElementCreationEvent() {
+        const eventDispatcher = getEventDispatcher();
+        if (eventDispatcher) {
+            const elementEvent = createEvent('xui_new_element')({
+                name: this.name,
+                attribs: this.attribs,
+                childCount: this.children.length
+            });
+            eventDispatcher.dispatchEvent(elementEvent);
+        }
     }
 
     render() {
@@ -258,9 +310,11 @@ class DOM {
     root = null;
     options = {
         "remove_elements_on_rerender": true,
+        "auto_render": true,
     };
     events = {
         "render": createEvent('xui_render'),
+        "element_creation": createEvent('xui_new_element'),
     };
     
     constructor() {
@@ -284,6 +338,7 @@ class DOM {
     newElement(name, attribs = {}, ...children) {
         let elem = new Element(name, attribs, ...children);
         this.#elements.push(elem);
+
         return elem;
     }
     
@@ -311,15 +366,8 @@ class DOM {
             elements: [...this.#elements],
         });
         
-        let eventDispatcher = document.getElementById("_xui_events");
-        if (!eventDispatcher) {
-            eventDispatcher = document.createElement("div");
-            eventDispatcher.id = "_xui_events";
-            eventDispatcher.style.display = "none";
-            eventDispatcher.style.position = "absolute";
-            document.body.insertBefore(eventDispatcher, document.body.firstChild);
-        }
-        
+        let eventDispatcher = getEventDispatcher();
+
         eventDispatcher.dispatchEvent(render_event);
 
         this.#elements.forEach(elem => this.root.appendChild(elem.render()));
@@ -403,27 +451,13 @@ let gXE = new XE(gDOM);
 let gEvents;
 
 const gStyle = {
-    create: function(name, properties) {
-        return gDOM.style.create(name, properties);
-    },
-    apply: function(element, name) {
-        return gDOM.style.apply(element, name);
-    },
-    inline: function(element, properties) {
-        return gDOM.style.inline(element, properties);
-    },
-    theme: function(themeObject) {
-        return gDOM.style.theme(themeObject);
-    },
-    update: function(name, properties) {
-        return gDOM.style.update(name, properties);
-    },
-    remove: function(name) {
-        return gDOM.style.remove(name);
-    },
-    unapply: function(element, name) {
-        return gDOM.style.unapply(element, name);
-    }
+    create: function(name, properties) { return gDOM.style.create(name, properties); },
+    apply: function(element, name) { return gDOM.style.apply(element, name); },
+    inline: function(element, properties) { return gDOM.style.inline(element, properties); },
+    theme: function(themeObject) { return gDOM.style.theme(themeObject); },
+    update: function(name, properties) { return gDOM.style.update(name, properties); },
+    remove: function(name) { return gDOM.style.remove(name); },
+    unapply: function(element, name) { return gDOM.style.unapply(element, name); }
 };
 
 let onloadExecuted = false;
@@ -439,9 +473,27 @@ window.onload = () => {
     gDOM.root = document.body;
    
     let event_dispatcher = new Element("div", {"id": "_xui_events", "style": "display: none; position: absolute;"});
+
     gEvents = event_dispatcher.render();
+    gEvents.on = function(eventName, handler) {
+        if (!(gEvents instanceof HTMLElement)) {
+            console.warn("[XUI] gEvents is not a valid DOM element");
+            return;
+        }
+
+        gEvents.addEventListener(eventName, handler);
+    };
+
     document.body.insertBefore(gEvents, document.body.firstChild);
-    
+   
+    if (gDOM.options.auto_render) {
+        eventDispatcher.addEventListener('xui_new_element', () => {
+            if (!gDOM.#state.rendered) {
+                gDOM.renderAll();
+            }
+        });
+    }
+
     const rootElement = document.getElementById("root");
     if (rootElement) {
         gDOM.root = rootElement;
@@ -450,7 +502,7 @@ window.onload = () => {
     }
 
     gDOM.init();
-    
+
     gDOM.executeOnload();
 };
 
