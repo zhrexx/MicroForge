@@ -3,12 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XUI Framework Demo</title>
+    <script src="xui.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+    </style>
 </head>
-<script src="xui.js" />
-<script>
-    gDOM.setOnload(() => {
-        gXE.p({}, "Hello, DOM");
-        gDOM.renderAll();
-    }); 
-</script>
+<body>
+    <div id="root"></div>
+
+    <script>
+        gDOM.title = "XUI Framework Demo";
+        
+        gDOM.setOnload(function() {
+            gXE.p({}, "Hello, DOM");
+            gDOM.renderAll();
+        });
+    </script>
+</body>
 </html>

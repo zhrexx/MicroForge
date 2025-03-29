@@ -30,12 +30,17 @@ function createEvent(eventName) {
     };
 }
 
-
 class Element {
     constructor(name, attribs = {}, ...children) {
         this.name = name;
         this.attribs = {...attribs};
         this.children = [...children];
+        this.attr = function (key, value) {
+            this.attribs[key] = value;
+        };
+        this.child = function (child) {
+            this.children.push(child);
+        };
     }
 
     render() {
@@ -57,18 +62,188 @@ class Element {
             }
         });
 
-
         return el;
     }
+}
 
-    appendChild(child) {
-        this.children.push(child);
-    }
-
-    appendAttribute(key, value) {
-        this.attribs[key] = value;
+class StyleManager {
+    #styles = {};
+    #styleElement = null;
+    #prefix = 'xui-';
+    
+    constructor(prefix = 'xui-') {
+        this.#prefix = prefix;
     }
     
+    init() {
+        if (!this.#styleElement) {
+            this.#styleElement = document.createElement('style');
+            this.#styleElement.id = `${this.#prefix}styles`;
+            document.head.appendChild(this.#styleElement);
+            log('Style manager initialized');
+        }
+    }
+    
+    createRule(name, properties) {
+        const ruleName = this.#prefix + name;
+        this.#styles[ruleName] = properties;
+        this.#updateStyleElement();
+        log(`Created style rule: ${ruleName}`);
+        return ruleName;
+    }
+    
+    updateRule(name, properties) {
+        const ruleName = name.startsWith(this.#prefix) ? name : this.#prefix + name;
+        if (this.#styles[ruleName]) {
+            this.#styles[ruleName] = {...this.#styles[ruleName], ...properties};
+        } else {
+            this.#styles[ruleName] = properties;
+        }
+        this.#updateStyleElement();
+        log(`Updated style rule: ${ruleName}`);
+        return ruleName;
+    }
+    
+    removeRule(name) {
+        const ruleName = name.startsWith(this.#prefix) ? name : this.#prefix + name;
+        if (this.#styles[ruleName]) {
+            delete this.#styles[ruleName];
+            this.#updateStyleElement();
+            log(`Removed style rule: ${ruleName}`);
+            return true;
+        }
+        return false;
+    }
+    
+    getRule(name) {
+        const ruleName = name.startsWith(this.#prefix) ? name : this.#prefix + name;
+        return this.#styles[ruleName] ? ruleName : null;
+    }
+    
+    #createCSS(properties) {
+        return Object.entries(properties)
+            .map(([key, value]) => {
+                const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                return `${cssKey}: ${value};`;
+            })
+            .join(' ');
+    }
+    
+    #updateStyleElement() {
+        if (!this.#styleElement) {
+            this.init();
+        }
+        
+        let cssText = '';
+        for (const [ruleName, properties] of Object.entries(this.#styles)) {
+            cssText += `.${ruleName} { ${this.#createCSS(properties)} }\n`;
+        }
+        
+        this.#styleElement.textContent = cssText;
+    }
+    
+    createTheme(theme) {
+        const themeRules = {};
+        for (const [name, properties] of Object.entries(theme)) {
+            const ruleName = this.createRule(name, properties);
+            themeRules[name] = ruleName;
+        }
+        return themeRules;
+    }
+    
+    applyStyles(element, properties) {
+        if (element instanceof Element) {
+            const cssText = this.#createCSS(properties);
+            element.attr('style', cssText);
+        } else if (element.attribs) {
+            const cssText = this.#createCSS(properties);
+            element.attribs.style = cssText;
+        }
+        return element;
+    }
+    
+    addClass(element, ruleName) {
+        const fullRuleName = ruleName.startsWith(this.#prefix) ? ruleName : this.#prefix + ruleName;
+        if (element instanceof Element) {
+            let classes = element.attribs.class || '';
+            if (!classes.includes(fullRuleName)) {
+                classes += (classes ? ' ' : '') + fullRuleName;
+                element.attr('class', classes);
+            }
+        } else if (element.attribs) {
+            let classes = element.attribs.class || '';
+            if (!classes.includes(fullRuleName)) {
+                classes += (classes ? ' ' : '') + fullRuleName;
+                element.attribs.class = classes;
+            }
+        }
+        return element;
+    }
+    
+    removeClass(element, ruleName) {
+        const fullRuleName = ruleName.startsWith(this.#prefix) ? ruleName : this.#prefix + ruleName;
+        if (element instanceof Element) {
+            let classes = element.attribs.class || '';
+            element.attr('class', classes.replace(new RegExp(`\\b${fullRuleName}\\b`, 'g'), '').trim());
+        } else if (element.attribs) {
+            let classes = element.attribs.class || '';
+            element.attribs.class = classes.replace(new RegExp(`\\b${fullRuleName}\\b`, 'g'), '').trim();
+        }
+        return element;
+    }
+    
+    getAllStyles() {
+        return {...this.#styles};
+    }
+}
+
+
+class XUIStyle {
+    constructor(dom) {
+        this.manager = new StyleManager();
+        this.dom = dom;
+    }
+    
+    init() {
+        this.manager.init();
+        return this;
+    }
+    
+    create(name, properties) {
+        return this.manager.createRule(name, properties);
+    }
+    
+    update(name, properties) {
+        return this.manager.updateRule(name, properties);
+    }
+    
+    remove(name) {
+        return this.manager.removeRule(name);
+    }
+    
+    apply(element, name) {
+        return this.manager.addClass(element, name);
+    }
+    
+    unapply(element, name) {
+        return this.manager.removeClass(element, name);
+    }
+    
+    inline(element, properties) {
+        return this.manager.applyStyles(element, properties);
+    }
+    
+    theme(themeObject) {
+        return this.manager.createTheme(themeObject);
+    }
+    
+    get(name) {
+        return this.manager.getRule(name);
+    }
+    
+    all() {
+        return this.manager.getAllStyles();
+    }
 }
 
 class DOM {
@@ -76,6 +251,7 @@ class DOM {
     #userOnload = null;
     #DOM_State = {
         "rendered": false,
+        "initialized": false
     };
     
     title = "XUI DOM"; // type = string
@@ -86,12 +262,23 @@ class DOM {
     events = {
         "render": createEvent('xui_render'),
     };
-
+    
+    constructor() {
+        this.style = new XUIStyle(this);
+    }
 
     init() {
+        if (this.#DOM_State["initialized"]) {
+            log("DOM already initialized, skipping");
+            return;
+        }
+        
         if (!checkType(this.title, "string")) return;
         log(`initialized with title: ${this.title}`);
         document.title = this.title;
+        this.style.init();
+        
+        this.#DOM_State["initialized"] = true;
     }
 
     newElement(name, attribs = {}, ...children) {
@@ -109,18 +296,31 @@ class DOM {
 
     renderAll() {
         if (this.root == null) return;
+        
+        if (this.options["remove_elements_on_rerender"] === true) {
+            this.root.innerHTML = '';
+        }
+        
         if (this.#DOM_State["rendered"] == true) {
-            if (this.options["remove_elements_on_rerender"] == true) {
-                this.root.innerHTML = '';
-            }
             log(`Rerendering ${this.#elements.length} elements`);
         } else {
-            log(`Rendering ${this.#elements.length} elements`);
+            log(`Rendering ${this.#elements.length} elements for the first time`);
         }
+        
         const render_event = this.events["render"]({
             elements: [...this.#elements],
         });
-        document.getElementById("_xui_events").dispatchEvent(render_event);
+        
+        let eventDispatcher = document.getElementById("_xui_events");
+        if (!eventDispatcher) {
+            eventDispatcher = document.createElement("div");
+            eventDispatcher.id = "_xui_events";
+            eventDispatcher.style.display = "none";
+            eventDispatcher.style.position = "absolute";
+            document.body.insertBefore(eventDispatcher, document.body.firstChild);
+        }
+        
+        eventDispatcher.dispatchEvent(render_event);
 
         this.#elements.forEach(elem => this.root.appendChild(elem.render()));
         this.#DOM_State["rendered"] = true;
@@ -140,6 +340,13 @@ class DOM {
 
     getOnload() {
         return this.#userOnload;
+    }
+    
+    executeOnload() {
+        const userOnload = this.getOnload();
+        if (typeof userOnload === 'function') {
+            userOnload();
+        }
     }
 }
 
@@ -190,19 +397,49 @@ class XE { // XUI Elements
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-
 // global variables
 let gDOM = new DOM(); 
 let gXE = new XE(gDOM);
 let gEvents;
 
+const gStyle = {
+    create: function(name, properties) {
+        return gDOM.style.create(name, properties);
+    },
+    apply: function(element, name) {
+        return gDOM.style.apply(element, name);
+    },
+    inline: function(element, properties) {
+        return gDOM.style.inline(element, properties);
+    },
+    theme: function(themeObject) {
+        return gDOM.style.theme(themeObject);
+    },
+    update: function(name, properties) {
+        return gDOM.style.update(name, properties);
+    },
+    remove: function(name) {
+        return gDOM.style.remove(name);
+    },
+    unapply: function(element, name) {
+        return gDOM.style.unapply(element, name);
+    }
+};
+
+let onloadExecuted = false;
+
 window.onload = () => {
+    if (onloadExecuted) {
+        log("onload already executed, skipping");
+        return;
+    }
+    
+    onloadExecuted = true;
+    
     gDOM.root = document.body;
    
-    let event_dispacher = new Element("div", {"id": "_xui_events", "style": "display: none; position: absolute;"});
-    
-    gEvents = event_dispacher.render();
-
+    let event_dispatcher = new Element("div", {"id": "_xui_events", "style": "display: none; position: absolute;"});
+    gEvents = event_dispatcher.render();
     document.body.insertBefore(gEvents, document.body.firstChild);
     
     const rootElement = document.getElementById("root");
@@ -213,14 +450,7 @@ window.onload = () => {
     }
 
     gDOM.init();
-
-    const userOnload = gDOM.getOnload();
-    if (typeof userOnload === 'function') {
-        userOnload();
-    }
+    
+    gDOM.executeOnload();
 };
-
-
-
-
 

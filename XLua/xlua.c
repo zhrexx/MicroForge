@@ -40,11 +40,8 @@
 typedef struct {
     int verbose;
     int interactive;
-    int safe_mode;
     int debug_mode;
     int profile_mode;
-    int sandbox_mode;
-    int watch_mode;
     const char* script_path;
     const char** script_args;
     int script_arg_count;
@@ -54,7 +51,6 @@ typedef struct {
 static volatile sig_atomic_t timeout_occurred = 0;
 static lua_State* global_lua_state = NULL;
 
-void print_banner();
 void print_help();
 RunnerConfig parse_arguments(int argc, char* argv[]);
 void setup_lua_path(lua_State* L);
@@ -65,13 +61,13 @@ void set_os_global(lua_State* L);
 void enable_script_timeout(int seconds);
 void disable_script_timeout();
 void timeout_handler(int signum);
-void sandbox_lua_environment(lua_State* L);
 void redirect_output(const char* filename);
 void restore_output();
 void* memory_panic_handler(void* ud, void* ptr, size_t osize, size_t nsize);
-void watch_script_and_reload(RunnerConfig config);
 int safe_lua_loader(lua_State* L, const char* filename);
 void enhanced_package_loader(lua_State* L);
+void set_lua_args(lua_State* L, RunnerConfig config);
+void load_xlua_libraries(lua_State *L);
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -80,9 +76,6 @@ int main(int argc, char* argv[]) {
     }
     RunnerConfig config = parse_arguments(argc, argv);
 
-    if (config.verbose) {
-        print_banner();
-    }
 
     lua_State* L = luaL_newstate();
     if (!L) {
@@ -98,12 +91,7 @@ int main(int argc, char* argv[]) {
     luaL_openlibs(L);
     setup_lua_path(L);
     set_os_global(L);
-
     enhanced_package_loader(L);
-
-    if (config.sandbox_mode) {
-        sandbox_lua_environment(L);
-    }
 
     if (config.output_file) {
         redirect_output(config.output_file);
@@ -116,19 +104,16 @@ int main(int argc, char* argv[]) {
     }
 
     if (config.script_path) {
-        if (config.watch_mode) {
-            watch_script_and_reload(config);
-        } else {
-            enable_script_timeout(MAX_SCRIPT_TIMEOUT);
-            run_lua_script(config);
-            disable_script_timeout();
-        }
+        enable_script_timeout(MAX_SCRIPT_TIMEOUT);
+        run_lua_script(config);
+        disable_script_timeout();
     }
 
     if (config.output_file) {
         restore_output();
     }
 
+    lua_close(L);
     return EXIT_SUCCESS;
 }
 
@@ -144,6 +129,10 @@ int safe_lua_loader(lua_State* L, const char* filename) {
     include_depth--;
 
     return result;
+}
+
+void load_xlua_libraries(lua_State *L) {
+    luaL_dofile(L, "libraries/pointers.lua");
 }
 
 void enhanced_package_loader(lua_State* L) {
@@ -225,39 +214,6 @@ void disable_script_timeout() {
     signal(SIGALRM, SIG_IGN);
 }
 
-void sandbox_lua_environment(lua_State* L) {
-    lua_pushnil(L);
-    lua_setglobal(L, "dofile");
-    lua_pushnil(L);
-    lua_setglobal(L, "loadfile");
-    
-    lua_gc(L, LUA_GCSETLIMIT, MAX_SANDBOX_MEMORY);
-}
-
-void watch_script_and_reload(RunnerConfig config) {
-    time_t last_modified = 0;
-    struct stat file_stat;
-
-    printf(COLOR_CYAN "Watching script: %s (Press Ctrl+C to exit)\n" COLOR_RESET, config.script_path);
-
-    while (1) {
-        if (stat(config.script_path, &file_stat) == 0) {
-            if (file_stat.st_mtime > last_modified) {
-                printf(COLOR_GREEN "Script changed. Reloading...\n" COLOR_RESET);
-                
-                run_lua_script(config);
-                last_modified = file_stat.st_mtime;
-            }
-        }
-
-        #ifdef _WIN32
-        Sleep(1000);
-        #else
-        sleep(1);
-        #endif
-    }
-}
-
 void redirect_output(const char* filename) {
     FILE* output_file = freopen(filename, "w", stdout);
     if (!output_file) {
@@ -275,20 +231,18 @@ RunnerConfig parse_arguments(int argc, char* argv[]) {
     RunnerConfig config = {0};
     
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-h") == 0) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             print_help();
             exit(EXIT_SUCCESS);
-        } else if (strcmp(argv[i], "-v") == 0) {
+        } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
             config.verbose = 1;
-        } else if (strcmp(argv[i], "-i") == 0) {
+        } else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--interactive") == 0) {
             config.interactive = 1;
-        } else if (strcmp(argv[i], "-s") == 0) {
-            config.safe_mode = 1;
-        } else if (strcmp(argv[i], "-x") == 0) {
-            config.sandbox_mode = 1;
-        } else if (strcmp(argv[i], "-w") == 0) {
-            config.watch_mode = 1;
-        } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
+            config.debug_mode = 1;
+        } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--profile") == 0) {
+            config.profile_mode = 1;
+        } else if ((strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) && i + 1 < argc) {
             config.output_file = argv[++i];
         } else if (!config.script_path) {
             config.script_path = argv[i];
@@ -304,29 +258,21 @@ RunnerConfig parse_arguments(int argc, char* argv[]) {
 void print_help() {
     printf(COLOR_BLUE "Usage: xlua [OPTIONS] <script> [SCRIPT ARGS]\n\n" COLOR_RESET
            "Options:\n"
-           "  -h         Show this help message\n"
-           "  -v         Enable verbose output\n"
-           "  -i         Start interactive REPL\n"
-           "  -s         Run in safe mode\n"
-           "  -x         Run in sandbox mode (restrict environment)\n"
-           "  -w         Watch and auto-reload script on change\n"
-           "  -o FILE    Redirect output to a file\n"
+           "  -h, --help         Show this help message\n"
+           "  -v, --verbose      Enable verbose output\n"
+           "  -i, --interactive  Start interactive REPL\n"
+           "  -d, --debug        Run with debug information\n"
+           "  -p, --profile      Enable profiling\n"
+           "  -o, --output FILE  Redirect output to a file\n"
            "\nExamples:\n"
            "  xlua script.lua\n"
-           "  xlua -x script.lua        (sandbox mode)\n"
-           "  xlua -w script.lua        (watch & auto-reload)\n"
+           "  xlua -i                     (interactive mode)\n"
+           "  xlua -d script.lua          (debug mode)\n"
+           "  xlua -p script.lua          (profile mode)\n"
            "  xlua -o output.txt script.lua  (redirect output)\n"
            COLOR_RESET);
 }
 
-void print_banner() {
-    printf(COLOR_CYAN 
-        "╔═══════════════════════════════════╗\n"
-        "║         " COLOR_MAGENTA "XLUA RUNNER" COLOR_CYAN "       ║\n"
-        "╚═══════════════════════════════════╝\n" 
-        COLOR_GREEN "Version 1.0.0 - Lua Runner\n" 
-        COLOR_RESET);
-}
 
 void setup_lua_path(lua_State* L) {
     lua_getglobal(L, "package");
@@ -335,18 +281,52 @@ void setup_lua_path(lua_State* L) {
     const char* current_path = lua_tostring(L, -1);
     char new_path[1024];
     snprintf(new_path, sizeof(new_path), 
-             "%s;.%c?.lua;.%c?%cinit.lua;/usr/local/share/lua/5.4/?.lua", 
+             "%s;.%c?.lua;.%c?%cinit.lua;/usr/local/share/lua/5.4/?.lua;./lib/?.lua;./modules/?.lua", 
              current_path, PLATFORM_SEPARATOR, PLATFORM_SEPARATOR, PLATFORM_SEPARATOR);
     
     lua_pop(L, 1);
     lua_pushstring(L, new_path);
     lua_setfield(L, -2, "path");
+    
+    lua_getfield(L, -1, "cpath");
+    const char* current_cpath = lua_tostring(L, -1);
+    char new_cpath[1024];
+    snprintf(new_cpath, sizeof(new_cpath),
+             "%s;.%c?.so;.%c?.dll;./lib/?.so;./lib/?.dll;./modules/?.so;./modules/?.dll",
+             current_cpath, PLATFORM_SEPARATOR, PLATFORM_SEPARATOR);
+    
+    lua_pop(L, 1);
+    lua_pushstring(L, new_cpath);
+    lua_setfield(L, -2, "cpath");
+    
     lua_pop(L, 1);
 }
 
 void set_os_global(lua_State* L) {
+    lua_createtable(L, 0, 2);
+    
     lua_pushstring(L, PLATFORM_NAME);
+    lua_setfield(L, -2, "name");
+    
+    char separator_str[2] = {PLATFORM_SEPARATOR, '\0'};
+    lua_pushstring(L, separator_str);
+    lua_setfield(L, -2, "separator");
+    
     lua_setglobal(L, "OS");
+}
+
+void set_lua_args(lua_State* L, RunnerConfig config) {
+    lua_createtable(L, config.script_arg_count, 1);
+    
+    lua_pushstring(L, config.script_path);
+    lua_rawseti(L, -2, 0);
+    
+    for (int i = 0; i < config.script_arg_count; i++) {
+        lua_pushstring(L, config.script_args[i]);
+        lua_rawseti(L, -2, i + 1);
+    }
+    
+    lua_setglobal(L, "arg");
 }
 
 void lua_error_handler(lua_State* L, int error_code) {
@@ -359,28 +339,49 @@ void lua_error_handler(lua_State* L, int error_code) {
 
 void run_lua_script(RunnerConfig config) {
     lua_State* L = luaL_newstate();
-    luaL_openlibs(L);
-    set_os_global(L);
-
-    lua_createtable(L, config.script_arg_count, 0);
-    for (int i = 0; i < config.script_arg_count; i++) {
-        lua_pushstring(L, config.script_args[i]);
-        lua_rawseti(L, -2, i);
+    if (!L) {
+        fprintf(stderr, COLOR_BRIGHT_RED "Fatal: Could not create Lua state for script execution\n" COLOR_RESET);
+        return;
     }
-    lua_setglobal(L, "arg");
-
+    
+    luaL_openlibs(L);
+    setup_lua_path(L);
+    set_os_global(L);
+    enhanced_package_loader(L);
+    set_lua_args(L, config);
+    
+    if (config.debug_mode) {
+        lua_pushboolean(L, 1);
+        lua_setglobal(L, "DEBUG_MODE");
+    }
+    
+    if (config.profile_mode) {
+        lua_pushboolean(L, 1);
+        lua_setglobal(L, "PROFILE_MODE");
+    }
+    
+    clock_t start_time = clock();
     int result = luaL_dofile(L, config.script_path);
+    clock_t end_time = clock();
+    
     lua_error_handler(L, result);
-
+    
+    if (config.profile_mode && result == LUA_OK) {
+        double execution_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+        printf(COLOR_GREEN "\nScript execution completed in %.4f seconds\n" COLOR_RESET, execution_time);
+    }
+    
     lua_close(L);
 }
 
 void run_interactive_repl(lua_State* L) {
-    char buffer[1024];
+    char buffer[MAX_LINE_LENGTH];
+    int line_number = 1;
+    
     printf(COLOR_GREEN "XLua Interactive REPL (type 'exit()' to quit)\n" COLOR_RESET);
     
     while (1) {
-        printf(COLOR_CYAN "xlua> " COLOR_RESET);
+        printf(COLOR_CYAN "[%d]> " COLOR_RESET, line_number++);
         
         if (fgets(buffer, sizeof(buffer), stdin) == NULL) break;
         
@@ -388,7 +389,18 @@ void run_interactive_repl(lua_State* L) {
         
         if (strcmp(buffer, "exit()") == 0) break;
         
+        if (strlen(buffer) == 0) continue;
+        
         int result = luaL_dostring(L, buffer);
-        lua_error_handler(L, result);
+        
+        if (result == LUA_OK && lua_gettop(L) > 0) {
+            lua_getglobal(L, "print");
+            lua_insert(L, 1);
+            lua_pcall(L, lua_gettop(L) - 1, 0, 0);
+        } else {
+            lua_error_handler(L, result);
+        }
     }
+    
+    printf(COLOR_GREEN "Exiting XLua REPL\n" COLOR_RESET);
 }
