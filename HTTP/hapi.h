@@ -715,7 +715,6 @@ void http_send_file_response(int client_socket, char *status, const char *filepa
             "HTTP/1.1 %s\r\n"
             "Content-Type: %s\r\n"
             "Content-Length: %ld\r\n"
-            "Cache-Control: public, max-age=31536000\r\n"
             "%s"
             "\r\n", 
             status, mime_type, file_size, cookie_header);
@@ -725,7 +724,6 @@ void http_send_file_response(int client_socket, char *status, const char *filepa
             "HTTP/1.1 %s\r\n"
             "Content-Type: %s\r\n"
             "Content-Length: %ld\r\n"
-            "Cache-Control: public, max-age=31536000\r\n"
             "\r\n", 
             status, mime_type, file_size);
     }
@@ -740,41 +738,61 @@ void http_send_file_response(int client_socket, char *status, const char *filepa
     
     free(header);
 
-    if (strncmp(mime_type, "text/", 5) == 0 || strcmp(mime_type, "application/json") == 0) {
-        char *buffer = malloc(file_size + 1);
-        if (!buffer) {
-            fclose(fp);
-            return;
-        }
-
-        fread(buffer, 1, file_size, fp);
-        buffer[file_size] = '\0';
+    const size_t CHUNK_SIZE = 16 * 1024;
+    char *file_buffer = malloc(CHUNK_SIZE);
+    
+    if (!file_buffer) {
         fclose(fp);
-
-        char *rendered = ht_render(tmpl, buffer);
-        ht_destroy(tmpl);
-        free(buffer);
-
-        if (rendered) {
-#ifdef SSL_ENABLE
-            SSL_write(ssl, rendered, strlen(rendered));
-#else
-            send(client_socket, rendered, strlen(rendered), 0);
-#endif
-            ht_free_rendered(rendered);
-        }
-    } else {
-        char file_buffer[4096];
-        size_t bytes_read;
-        while ((bytes_read = fread(file_buffer, 1, sizeof(file_buffer), fp)) > 0) {
-#ifdef SSL_ENABLE
-            SSL_write(ssl, file_buffer, bytes_read);
-#else
-            send(client_socket, file_buffer, bytes_read, 0);
-#endif
-        }
-        fclose(fp);
+        return;
     }
+    
+    size_t bytes_read;
+    size_t total_sent = 0;
+    
+    while ((bytes_read = fread(file_buffer, 1, CHUNK_SIZE, fp)) > 0) {
+        ssize_t bytes_sent = 0;
+        size_t remaining = bytes_read;
+        size_t offset = 0;
+        
+        while (remaining > 0) {
+#ifdef SSL_ENABLE
+            bytes_sent = SSL_write(ssl, file_buffer + offset, remaining);
+            if (bytes_sent <= 0) {
+                int ssl_error = SSL_get_error(ssl, bytes_sent);
+                if (ssl_error == SSL_ERROR_WANT_WRITE || ssl_error == SSL_ERROR_WANT_READ) {
+                    continue;
+                } else {
+                    ERR_print_errors_fp(stderr);
+                    break;
+                }
+            }
+#else
+            bytes_sent = send(client_socket, file_buffer + offset, remaining, 0);
+            if (bytes_sent < 0) {
+                if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                    continue;
+                } else {
+                    perror("send");
+                    break;
+                }
+            }
+#endif
+            
+            remaining -= bytes_sent;
+            offset += bytes_sent;
+            total_sent += bytes_sent;
+        }
+        
+        if (remaining > 0) {
+            break;
+        }
+    }
+    
+    free(file_buffer);
+    fclose(fp);
+    
+    log_msg("INFO", "File transfer complete: %s (%ld/%ld bytes)\n", 
+            filepath, total_sent, file_size);
 }
 
 extern void handle_signal(int);
