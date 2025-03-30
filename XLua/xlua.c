@@ -82,8 +82,6 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, COLOR_BRIGHT_RED "Fatal: Could not create Lua state\n" COLOR_RESET);
         return EXIT_FAILURE;
     }
-    xstd_init(L);
-
     global_lua_state = L;
 
     lua_setallocf(L, memory_panic_handler, NULL);
@@ -138,17 +136,24 @@ void load_xlua_libraries(lua_State *L) {
 void enhanced_package_loader(lua_State* L) {
     lua_settop(L, 0);
     lua_getglobal(L, "package");
-    lua_getfield(L, -1, "loaders");
+    
+    lua_getfield(L, -1, "searchers");
     if (!lua_istable(L, -1)) {
-        fprintf(stderr, "Error: package.loaders is not a table\n");
-        lua_pop(L, 2);
-        return;
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "loaders");
+        if (!lua_istable(L, -1)) {
+            fprintf(stderr, "Error: neither package.searchers nor package.loaders is a table\n");
+            lua_pop(L, 2);
+            return;
+        }
     }
+    
     int loader_count = lua_rawlen(L, -1);
     lua_pushcfunction(L, (lua_CFunction)safe_lua_loader);
     lua_rawseti(L, -2, loader_count + 1);
     lua_pop(L, 2);
 }
+
 
 void* memory_panic_handler(void* ud, void* ptr, size_t osize, size_t nsize) {
     if (nsize == 0) {
@@ -350,6 +355,8 @@ void run_lua_script(RunnerConfig config) {
     enhanced_package_loader(L);
     set_lua_args(L, config);
     
+    xstd_init(L);
+
     if (config.debug_mode) {
         lua_pushboolean(L, 1);
         lua_setglobal(L, "DEBUG_MODE");

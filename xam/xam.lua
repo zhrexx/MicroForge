@@ -1,7 +1,5 @@
 #!/usr/bin/env lua
 
--- TODO: add 32 bit maybe
-
 local xam = {}
 local colors = {
     reset = "\27[0m",
@@ -39,7 +37,8 @@ local config = {
     entryPoint = "__entry",
     target = (xam:OS() == "win") and "win" or "linux",
     verbose = false,
-    optimize = false
+    optimize = false,
+    auto_compile = true,
 }
 
 local i = 1
@@ -62,6 +61,8 @@ while arg and i <= #arg do
     elseif arg[i] == "--target" then 
         config.target = arg[i+1]
         i = i + 2
+    elseif arg[i] == "--no-auto-compile" then 
+        config.auto_compile = false;
     elseif arg[i] == "-h" or arg[i] == "--help" then
         printBanner()
         print("Usage: xam [options]")
@@ -101,7 +102,6 @@ segment readable executable
     end
 end
 
-
 local header = generateHeader()
 
 local function log(msg, color)
@@ -135,18 +135,6 @@ local preprocessor = {
     conditionalStack = {},
     currentCondition = true
 }
-
-local function log(msg, color)
-    if config.verbose then
-        color = color or colors.green
-        io.write(color, msg, colors.reset, "\n")
-    end
-end
-
-local function errorExit(msg)
-    io.stderr:write(colors.red, "ERROR: ", msg, colors.reset, "\n")
-    os.exit(1)
-end
 
 local function resolveIncludePath(filename)
     for _, path in ipairs(preprocessor.includePaths) do
@@ -332,10 +320,6 @@ local function optimizeCode(lines)
     return result
 end
 
-function endswith(str, suffix)
-    return str:sub(-#suffix) == suffix
-end
-
 local function extractDataLabels(content)
     local data_labels = {}
     for line in content:gmatch("[^\r\n]+") do
@@ -356,8 +340,7 @@ local function extractDataLabels(content)
             if label and str then
                 local num = tonumber(str)
                 data_labels[label] = num or str
-                local value_type = type(data_labels[label])
-                local value_str = value_type == "string" and ("'" .. str .. "'") or str
+                local value_str = type(num) == "number" and str or ("'" .. str .. "'")
                 log("Found data label: " .. label .. " = " .. value_str, colors.magenta)
             end
         end
@@ -378,10 +361,13 @@ local function substituteBuiltins(line, data_labels)
             errorExit("strlen: undefined data label '" .. label .. "'")
         end
     end)
-  
+    
+    line = line:gsub("__FILE__", config.inputFile)
+    line = line:gsub("__DATE__", os.date("%Y-%m-%d"))
+    line = line:gsub("__TIME__", os.date("%H:%M:%S"))
+
     return line
 end
-
 
 local function processContent(content)
     local lines = {}
@@ -438,7 +424,7 @@ local function processContent(content)
                     entry_count = entry_count + 1
                 end
                 
-                if endswith(processed_line, ':') then
+                if processed_line:sub(-1) == ':' then
                     table.insert(code_section, processed_line)
                 else
                     table.insert(code_section, string.format("    %s", processed_line))
@@ -493,6 +479,16 @@ local function writeOutputFile(filename, content)
     io.write(colors.green, "Written " .. #content .. " bytes to " .. filename, "\n")
 end
 
+local function auto_compile() 
+    if config.target == "linux" then 
+        os.execute(string.format("fasm %s", config.outputFile))
+    else 
+        os.execute(string.format("fasm.exe %s", config.outputFile))
+    end
+    os.remove(config.outputFile)
+    print("Auto Compile finished")
+end 
+
 local startTime = os.clock()
 
 local function main()
@@ -501,6 +497,7 @@ local function main()
     io.write(colors.bright_yellow, "Input:  ", colors.reset, config.inputFile, "\n")
     io.write(colors.bright_yellow, "Output: ", colors.reset, config.outputFile, "\n")
     io.write(colors.bright_yellow, "Entry:  ", colors.reset, config.entryPoint, "\n")
+    io.write(colors.bright_yellow, "Auto Compile: ", colors.reset, tostring(config.auto_compile), "\n")
     print("")
     
     local content = parseInputFile(config.inputFile)
@@ -510,7 +507,11 @@ local function main()
     
     local elapsed = os.clock() - startTime
     io.write(colors.green, "Assembly successful! ", colors.reset, 
-             "Completed in ", string.format("%.2f", elapsed * 1000), "ms\n")
+             "Completed in ", string.format("%.2fms", elapsed * 1000), "\n")
+
+    if config.auto_compile then 
+        auto_compile()
+    end
 end
 
 local status, err = pcall(main)
