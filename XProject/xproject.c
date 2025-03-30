@@ -112,6 +112,90 @@ int directory_exists(const char* path) {
     #endif
 }
 
+int gout = 0;
+
+int redirectOutput(const char *filename) {
+    int original_stdout;
+    FILE *fp;
+    
+#ifdef _WIN32
+    original_stdout = _dup(_fileno(stdout));
+    if (original_stdout == -1) {
+        perror("Failed to duplicate stdout");
+        return -1;
+    }
+    
+    fp = freopen(filename, "w", stdout);
+#else
+    original_stdout = dup(STDOUT_FILENO);
+    if (original_stdout == -1) {
+        perror("Failed to duplicate stdout");
+        return -1;
+    }
+    
+    fp = freopen(filename, "w", stdout);
+#endif
+    
+    if (fp == NULL) {
+        perror("Failed to redirect stdout");
+#ifdef _WIN32
+        _dup2(original_stdout, _fileno(stdout));
+        _close(original_stdout);
+#else
+        dup2(original_stdout, STDOUT_FILENO);
+        close(original_stdout);
+#endif
+        return -1;
+    }
+    
+    return original_stdout;
+}
+
+int restoreOutput(int original_stdout) {
+    if (original_stdout < 0) {
+        fprintf(stderr, "Invalid original stdout descriptor\n");
+        return -1;
+    }
+    
+    fflush(stdout);
+    
+#ifdef _WIN32
+    fclose(stdout);
+    
+    if (_dup2(original_stdout, _fileno(stdout)) == -1) {
+        perror("Failed to restore stdout");
+        _close(original_stdout);
+        return -1;
+    }
+    
+    FILE *fp = _fdopen(_fileno(stdout), "w");
+    if (fp == NULL) {
+        perror("Failed to reopen stdout");
+        return -1;
+    }
+    
+    _close(original_stdout);
+#else
+    fclose(stdout);
+    
+    if (dup2(original_stdout, STDOUT_FILENO) == -1) {
+        perror("Failed to restore stdout");
+        close(original_stdout);
+        return -1;
+    }
+    
+    FILE *fp = fdopen(STDOUT_FILENO, "w");
+    if (fp == NULL) {
+        perror("Failed to reopen stdout");
+        return -1;
+    }
+    
+    close(original_stdout);
+#endif
+    
+    return 0;
+}
+
 int system_command(const char* command) {
     return system(command);
 }
@@ -592,6 +676,21 @@ static void push_function(lua_State *L, lua_CFunction f, const char *name) {
     lua_setfield(L, -2, name);
 }
 
+static int lua_redirect_output(lua_State *L) {
+    gout = redirectOutput(luaL_checkstring(L, 1));
+    return 0;
+}
+
+static int lua_restore_output(lua_State *L) {
+    restoreOutput(gout);
+    return 0;
+}
+
+static int lua_set_output_directory(lua_State *L) {
+    strcpy(build_system.output_dir, luaL_checkstring(L, 1));
+    return 0;
+}
+
 void setup_lua_functions(lua_State* L) {
     lua_newtable(L);
 
@@ -614,6 +713,9 @@ void setup_lua_functions(lua_State* L) {
     push_function(L, lua_get_absolute_path, "get_absolute_path");
     push_function(L, lua_hash_file, "hash_file");
     push_function(L, lua_get_platform, "get_platform");
+    push_function(L, lua_redirect_output, "redirect_output");
+    push_function(L, lua_restore_output, "restore_output");
+    push_function(L, lua_set_output_directory, "set_output_directory"); 
 
     lua_setglobal(L, "x");
 
@@ -628,11 +730,11 @@ void setup_lua_functions(lua_State* L) {
 int main(int argc, char* argv[]) {
     #ifdef _WIN32
     strcpy(build_system.compiler, "cl");
-    strcpy(build_system.cflags, "/W4 /O2");
+    strcpy(build_system.cflags, "");
     strcpy(build_system.ldflags, "");
     #else
     strcpy(build_system.compiler, "gcc");
-    strcpy(build_system.cflags, "-Wall -Wextra -O2");
+    strcpy(build_system.cflags, "");
     strcpy(build_system.ldflags, "");
     #endif
 
