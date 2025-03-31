@@ -12,38 +12,38 @@
     exit(1);
 
 typedef enum {
-    TOKEN_ID,         // names (identifiers)
-    TOKEN_PLUS,       // +
-    TOKEN_MINUS,      // -
-    TOKEN_MULTIPLY,   // *
-    TOKEN_DIVIDE,     // /
-    TOKEN_MODULO,     // %
-    TOKEN_EQUALS,     // =
-    TOKEN_COLON,      // :
-    TOKEN_SEMICOLON,  // ;
-    TOKEN_LPAREN,     // (
-    TOKEN_RPAREN,     // )
-    TOKEN_LBRACE,     // {
-    TOKEN_RBRACE,     // }
-    TOKEN_LBRACKET,   // [
-    TOKEN_RBRACKET,   // ]
-    TOKEN_LT,         // <
-    TOKEN_GT,         // >
-    TOKEN_LE,         // <=
-    TOKEN_GE,         // >=
-    TOKEN_EQ,         // ==
-    TOKEN_NE,         // !=
-    TOKEN_AND,        // &&
-    TOKEN_OR,         // ||
-    TOKEN_NOT,        // !
-    TOKEN_DOT,        // .
-    TOKEN_COMMA,      // ,
-    TOKEN_STRING,     // string literals
-    TOKEN_NUMBER,     // numbers (integers and floating-point)
-    TOKEN_KEYWORD,    // keywords like if, for, while, etc.
-    TOKEN_COMMENT,    // comments
-    TOKEN_EOF,        // end of file
-    TOKEN_ERROR,      // error token
+    TOKEN_ID,
+    TOKEN_PLUS,
+    TOKEN_MINUS,
+    TOKEN_MULTIPLY,
+    TOKEN_DIVIDE,
+    TOKEN_MODULO,
+    TOKEN_EQUALS,
+    TOKEN_COLON,
+    TOKEN_SEMICOLON,
+    TOKEN_LPAREN,
+    TOKEN_RPAREN,
+    TOKEN_LBRACE,
+    TOKEN_RBRACE,
+    TOKEN_LBRACKET,
+    TOKEN_RBRACKET,
+    TOKEN_LT,
+    TOKEN_GT,
+    TOKEN_LE,
+    TOKEN_GE,
+    TOKEN_EQ,
+    TOKEN_NE,
+    TOKEN_AND,
+    TOKEN_OR,
+    TOKEN_NOT,
+    TOKEN_DOT,
+    TOKEN_COMMA,
+    TOKEN_STRING,
+    TOKEN_NUMBER,
+    TOKEN_KEYWORD,
+    TOKEN_COMMENT,
+    TOKEN_EOF,
+    TOKEN_ERROR,
 } TokenType;
 
 typedef struct {
@@ -72,7 +72,7 @@ typedef struct {
 } Lexer;
 
 #define INIT_TOKEN_CAPACITY 100
-#define MAX_KEYWORD_COUNT 20
+#define MAX_KEYWORD_COUNT 50
 
 Token token_create(TokenType type, const char *lexeme, size_t line, size_t column) {
     Token token;
@@ -97,6 +97,26 @@ void token_destroy(Token *token) {
         token->type != TOKEN_GT && token->type != TOKEN_NOT) {
         free(token->lexeme);
     }
+}
+
+int lexer_add_keyword(Lexer *lexer, const char *keyword) {
+    if (lexer->keywords_count >= MAX_KEYWORD_COUNT) {
+        return 0;
+    }
+    
+    for (size_t i = 0; i < lexer->keywords_count; i++) {
+        if (strcmp(lexer->keywords[i], keyword) == 0) {
+            return 0;
+        }
+    }
+    
+    lexer->keywords[lexer->keywords_count] = strdup(keyword);
+    if (!lexer->keywords[lexer->keywords_count]) {
+        return 0;
+    }
+    
+    lexer->keywords_count++;
+    return 1;
 }
 
 Lexer *lexer_create(char *filename) {
@@ -146,16 +166,7 @@ Lexer *lexer_create(char *filename) {
     }
 
     result->keywords_count = 0;
-    char *standard_keywords[] = {
-        "if", "else", "while", "for", "return", "break", "continue", 
-        "function", "var", "const", "true", "false", "null", "import"
-    };
     
-    size_t num_standard_keywords = sizeof(standard_keywords) / sizeof(standard_keywords[0]);
-    for (size_t i = 0; i < num_standard_keywords && i < MAX_KEYWORD_COUNT; i++) {
-        result->keywords[result->keywords_count++] = strdup(standard_keywords[i]);
-    }
-
     return result;
 }
 
@@ -325,7 +336,7 @@ Token lexer_get_string_token(Lexer *lexer) {
     
     lexer_advance(lexer);
     
-    buffer[buffer_index-1] = '\0';
+    buffer[buffer_index] = '\0';
     Token token = token_create(TOKEN_STRING, buffer, start_line, start_column);
     free(buffer);
     
