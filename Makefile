@@ -1,4 +1,4 @@
-IGNORE_DIRS = xam XLua Crossline XProject flag.h LPM
+IGNORE_DIRS = xam XLua Crossline XProject flag.h LPM xmalloc
 SOURCES = $(shell find . -type f -name "*.c" $(foreach dir,$(IGNORE_DIRS),-not -path "./$(dir)/*"))
 EXEC_NAMES = $(notdir $(SOURCES:.c=))
 EXECS = $(addprefix ./,$(EXEC_NAMES))
