@@ -1,29 +1,58 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XUI Framework Demo</title>
-    <script src="xui.js" ></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
-
+<DOCTYPE html>
+<html>
+    <script src="xui.js"></script> 
     <script>
-        gDOM.title = "XUI Framework Demo";
-        
-        gDOM.setOnload(function() {
-            gXE.p({}, "Hello, DOM");
-            gDOM.renderAll();
-        });
+        // Initialize the app when page loads
+gDOM.setOnload(() => {
+  // Set document title
+  gDOM.title = "XUI Sample App";
+  gDOM.init(); 
+  // Create some styles
+  gStyle.create("button", {
+    backgroundColor: "#4CAF50",
+    color: "white",
+    padding: "10px 15px",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer"
+  });
+  
+  gStyle.create("header", {
+    backgroundColor: "#f1f1f1",
+    padding: "20px",
+    textAlign: "center",
+    marginBottom: "20px"
+  });
+  
+  // Create elements
+  const header = gXE.header({}, 
+    gXE.h1({}, "My XUI App")
+  );
+  
+  const counter = gXE.div({id: "counter"}, "Count: 0");
+  
+  const button = gXE.button({}, "Increment")
+    .on("click", function() {
+      let count = parseInt(counter.children[0].split(": ")[1]) + 1;
+      counter.text(`Count: ${count}`);
+      gDOM.renderAll();
+    });
+  
+  // Apply styles
+  gStyle.apply(header, "header");
+  gStyle.apply(button, "button");
+  
+  // Add elements to DOM
+  gDOM.root.innerHTML = '';
+  gDOM.newElement("div", {class: "container"}, 
+    header,
+    counter,
+    button
+  );
+  
+  // Render everything
+  gDOM.renderAll();
+});
     </script>
-</body>
+
 </html>

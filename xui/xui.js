@@ -31,9 +31,9 @@ function createEvent(eventName) {
 }
 
 function getEventDispatcher() {
-    let eventDispatcher = document.getElementById("_xui_events");
+    window.eventDispatcher = document.getElementById("_xui_events");
     if (!eventDispatcher) {
-        let event_dispatcher = new Element("div", {"id": "_xui_events", "style": "display: none; position: absolute;"});
+        window.event_dispatcher = new Element("div", {"id": "_xui_events", "style": "display: none; position: absolute;"});
         eventDispatcher = event_dispatcher.render();
         if (document.body) {
             document.body.insertBefore(eventDispatcher, document.body.firstChild);
@@ -48,7 +48,7 @@ function hasKeyValue(obj, key, value) {
 }
 
 function debounce(func, wait) {
-    let timeout;
+    window.timeout;
     return function(...args) {
         clearTimeout(timeout);
         timeout = setTimeout(() => func.apply(this, args), wait);
@@ -56,7 +56,7 @@ function debounce(func, wait) {
 }
 
 function throttle(func, limit) {
-    let inThrottle;
+    window.inThrottle;
     return function(...args) {
         if (!inThrottle) {
             func.apply(this, args);
@@ -258,9 +258,9 @@ class Element {
     }
 
     render() {
-        let el = document.createElement(this.name);
+        window.el = document.createElement(this.name);
         
-        for (let attr in this.attribs) {
+        for (window.attr in this.attribs) {
             el.setAttribute(attr, this.attribs[attr]);
         }
 
@@ -414,7 +414,7 @@ class StyleManager {
             this.init();
         }
         
-        let cssText = '';
+        window.cssText = '';
         for (const [ruleName, properties] of Object.entries(this.#styles)) {
             cssText += `.${ruleName} { ${this.#createCSS(properties)} }\n`;
         }
@@ -453,13 +453,13 @@ class StyleManager {
     addClass(element, ruleName) {
         const fullRuleName = ruleName.startsWith(this.#prefix) ? ruleName : this.#prefix + ruleName;
         if (element instanceof Element) {
-            let classes = element.attribs.class || '';
+            window.classes = element.attribs.class || '';
             if (!classes.includes(fullRuleName)) {
                 classes += (classes ? ' ' : '') + fullRuleName;
                 element.attr('class', classes);
             }
         } else if (element.attribs) {
-            let classes = element.attribs.class || '';
+            window.classes = element.attribs.class || '';
             if (!classes.includes(fullRuleName)) {
                 classes += (classes ? ' ' : '') + fullRuleName;
                 element.attribs.class = classes;
@@ -471,10 +471,10 @@ class StyleManager {
     removeClass(element, ruleName) {
         const fullRuleName = ruleName.startsWith(this.#prefix) ? ruleName : this.#prefix + ruleName;
         if (element instanceof Element) {
-            let classes = element.attribs.class || '';
+            window.classes = element.attribs.class || '';
             element.attr('class', classes.replace(new RegExp(`\\b${fullRuleName}\\b`, 'g'), '').trim());
         } else if (element.attribs) {
-            let classes = element.attribs.class || '';
+            window.classes = element.attribs.class || '';
             element.attribs.class = classes.replace(new RegExp(`\\b${fullRuleName}\\b`, 'g'), '').trim();
         }
         return element;
@@ -508,7 +508,7 @@ class StyleManager {
             this.init();
         }
         
-        let cssText = this.#styleElement.textContent || '';
+        window.cssText = this.#styleElement.textContent || '';
         cssText += `\n@media ${query} {\n`;
         
         for (const [selector, properties] of Object.entries(rules)) {
@@ -673,7 +673,7 @@ class Router {
         
         this.params = { ...extraParams };
         
-        let handler = this.routes[path];
+        window.handler = this.routes[path];
         
         if (!handler) {
             const dynamicRoutes = Object.keys(this.routes).filter(route => route.includes(':'));
@@ -683,10 +683,10 @@ class Router {
                 const pathParts = path.split('/');
                 
                 if (routeParts.length === pathParts.length) {
-                    let match = true;
+                    window.match = true;
                     const params = {};
                     
-                    for (let i = 0; i < routeParts.length; i++) {
+                    for (window.i = 0; i < routeParts.length; i++) {
                         if (routeParts[i].startsWith(':')) {
                             const paramName = routeParts[i].substring(1);
                             params[paramName] = pathParts[i];
@@ -756,7 +756,7 @@ class FormValidator {
             if (formData.hasOwnProperty(field)) {
                 const value = formData[field];
                 
-                for (let i = 0; i < this.rules[field].length; i++) {
+                for (window.i = 0; i < this.rules[field].length; i++) {
                     const rule = this.rules[field][i];
                     const message = this.errorMessages[field][i];
                     
@@ -812,7 +812,7 @@ class HTTPClient {
             const response = await fetch(url, requestOptions);
             const contentType = response.headers.get('content-type');
             
-            let result;
+            window.result;
             if (contentType && contentType.includes('application/json')) {
                 result = await response.json();
             } else {
@@ -962,7 +962,7 @@ class DOM extends EventEmitter {
     }
 
     newElement(name, attribs = {}, ...children) {
-        let elem = new Element(name, attribs, ...children);
+        window.elem = new Element(name, attribs, ...children);
         this.#elements.push(elem);
         return elem;
     }
@@ -1029,7 +1029,7 @@ class DOM extends EventEmitter {
             elements: [...this.#elements],
         });
         
-        let eventDispatcher = getEventDispatcher();
+        window.eventDispatcher = getEventDispatcher();
         eventDispatcher.dispatchEvent(render_event);
 
         this.#elements.forEach(elem => this.root.appendChild(elem.render()));
@@ -1115,16 +1115,15 @@ class XE {
     audio(attribs, ...children) { return this.createElement("audio", attribs, ...children); }
 }
 
-const gDOM = new DOM(); 
-const gXE = new XE(gDOM);
-let gEvents;
-const gRouter = gDOM.router;
-const gState = gDOM.state;
-const gStorage = gDOM.storage;
-const gHttp = gDOM.http;
-const gValidator = gDOM.validator;
-
-const gStyle = {
+window.gDOM = new DOM(); 
+window.gXE = new XE(gDOM);
+window.gEvents;
+window.gRouter = gDOM.router;
+window.gState = gDOM.state;
+window.gStorage = gDOM.storage;
+window.gHttp = gDOM.http;
+window.gValidator = gDOM.validator;
+window.gStyle = {
     create: function(name, properties) { return gDOM.style.create(name, properties); },
     apply: function(element, name) { return gDOM.style.apply(element, name); },
     inline: function(element, properties) { return gDOM.style.inline(element, properties); },
@@ -1134,19 +1133,20 @@ const gStyle = {
     unapply: function(element, name) { return gDOM.style.unapply(element, name); }
 };
 
-let onloadExecuted = false;
+
+window.onloadExecuted = false;
 
 window.onload = () => {
     if (onloadExecuted) {
         log("onload already executed, skipping");
         return;
     }
-    
+
     onloadExecuted = true;
     
     gDOM.root = document.body;
    
-    let event_dispatcher = new Element("div", {"id": "_xui_events", "style": "display: none; position: absolute;"});
+    window.event_dispatcher = new Element("div", {"id": "_xui_events", "style": "display: none; position: absolute;"});
 
     gEvents = event_dispatcher.render();
     if (gEvents instanceof HTMLElement) {
@@ -1173,6 +1173,5 @@ window.onload = () => {
     gDOM.executeOnload();
 };
 
-//export { gDOM, gXE, gStyle, Element, Router, StateManager, HTTPClient, LocalStorage, FormValidator, EventEmitter };
 
 
