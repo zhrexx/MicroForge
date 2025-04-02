@@ -4,53 +4,7 @@
     <script>
         // Initialize the app when page loads
 gDOM.setOnload(() => {
-  // Set document title
-  gDOM.title = "XUI Sample App";
-  gDOM.init(); 
-  // Create some styles
-  gStyle.create("button", {
-    backgroundColor: "#4CAF50",
-    color: "white",
-    padding: "10px 15px",
-    border: "none",
-    borderRadius: "4px",
-    cursor: "pointer"
-  });
-  
-  gStyle.create("header", {
-    backgroundColor: "#f1f1f1",
-    padding: "20px",
-    textAlign: "center",
-    marginBottom: "20px"
-  });
-  
-  // Create elements
-  const header = gXE.header({}, 
-    gXE.h1({}, "My XUI App")
-  );
-  
-  const counter = gXE.div({id: "counter"}, "Count: 0");
-  
-  const button = gXE.button({}, "Increment")
-    .on("click", function() {
-      let count = parseInt(counter.children[0].split(": ")[1]) + 1;
-      counter.text(`Count: ${count}`);
-      gDOM.renderAll();
-    });
-  
-  // Apply styles
-  gStyle.apply(header, "header");
-  gStyle.apply(button, "button");
-  
-  // Add elements to DOM
-  gDOM.root.innerHTML = '';
-  gDOM.newElement("div", {class: "container"}, 
-    header,
-    counter,
-    button
-  );
-  
-  // Render everything
+    gXE.h1({}, "Hello, World");
   gDOM.renderAll();
 });
     </script>
