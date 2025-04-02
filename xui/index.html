@@ -1,12 +1,31 @@
-<DOCTYPE html>
+<!DOCTYPE html>
 <html>
     <script src="xui.js"></script> 
     <script>
-        // Initialize the app when page loads
-gDOM.setOnload(() => {
-    gXE.h1({}, "Hello, World");
-  gDOM.renderAll();
-});
+    const { app, el } = gXWUI.create({ title: 'My XWUI App' });
+
+    app.style.create('button', {
+        backgroundColor: '#4CAF50',
+        color: 'white',
+        padding: '10px 15px',
+        border: 'none',
+        borderRadius: '4px'
+    });
+    
+    app.state.set({clickedTimes: 0});
+
+    el.h1({}, "Hello, DOM");
+    app.render();
+    const timesDisplay = el.p({}, app.state.$.clickedTimes);
+    const button = el.button({}, "Click Me")
+        .on('click', (e) => {
+            timesDisplay.text(app.state.$.clickedTimes += 1);
+            app.render();
+        });
+
+    app.style.apply(button, 'button');
+    
+    app.render();
     </script>
 
 </html>
