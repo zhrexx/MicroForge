@@ -3,7 +3,7 @@
     <script src="xui.js"></script> 
     <script>
     const { app, el } = gXWUI.create({ title: 'My XWUI App' });
-
+    
     app.style.create('button', {
         backgroundColor: '#4CAF50',
         color: 'white',
@@ -16,10 +16,10 @@
 
     el.h1({}, "Hello, DOM");
     app.render();
-    const timesDisplay = el.p({}, app.state.$.clickedTimes);
+    const timesDisplay = el.p({}, "Clicked Times: " + app.state.$.clickedTimes);
     const button = el.button({}, "Click Me")
         .on('click', (e) => {
-            timesDisplay.text(app.state.$.clickedTimes += 1);
+            timesDisplay.text("Clicked Times: " + (app.state.$.clickedTimes += 1));
             app.render();
         });
 

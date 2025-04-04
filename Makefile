@@ -1,10 +1,10 @@
-IGNORE_DIRS = xam XLua Crossline XProject flag.h LPM xmalloc xevent.h XLib
+IGNORE_DIRS = xam XLua Crossline XProject flag.h LPM xmalloc xevent.h XLib vector.h
 SOURCES = $(shell find . -type f -name "*.c" $(foreach dir,$(IGNORE_DIRS),-not -path "./$(dir)/*"))
 EXEC_NAMES = $(notdir $(SOURCES:.c=))
 EXECS = $(addprefix ./,$(EXEC_NAMES))
 GIT_HASH := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 CC = gcc
-CFLAGS = -Wall -Wextra -pedantic -static -DGIT_HASH='"$(GIT_HASH)"'
+CFLAGS = -pedantic -static -DGIT_HASH='"$(GIT_HASH)"'
 RM = rm -f
 
 .PHONY: all clean
