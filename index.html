@@ -1,113 +1,777 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang='en'>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MicroForge | A Collection of Libraries</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Roboto', sans-serif;
-      background: linear-gradient(135deg, #1f1c2c, #928dab);
-      color: #e0e0e0;
-      line-height: 1.6;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-    a {
-      color: #64ffda;
-      text-decoration: none;
-      transition: color 0.3s ease;
-    }
-    a:hover { color: #aaffff; }
-    header {
-      padding: 3rem 1rem;
-      text-align: center;
-      height: 325px;
-      width: 100vw;
-      background: url('assets/banner.svg') no-repeat center center;
-      background-size: cover;
-      background-color: rgba(0, 0, 0, 0.4);
-    }
-    header img {
-      width: 100px;
-      height: auto;
-      margin-bottom: 1rem;
-    }
-    header h1 {
-      font-family: 'Playfair Display', serif;
-      font-size: 3.5rem;
-      letter-spacing: 1px;
-      margin-bottom: 0.5rem;
-    }
-    header p { font-size: 1.25rem; color: #ccc; }
-    main {
-      flex: 1;
-      padding: 2rem 1rem;
-      max-width: 1000px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 2rem;
-    }
-    .card {
-      background: rgba(30, 30, 30, 0.85);
-      border-radius: 10px;
-      padding: 2rem;
-      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-      border: 1px solid transparent;
-      background-clip: padding-box;
-    }
-    .card:hover {
-      transform: translateY(-10px);
-      box-shadow: 0 12px 24px rgba(0,0,0,0.4);
-      border: 1px solid #64ffda;
-    }
-    .card h2 {
-      font-size: 1.8rem;
-      margin-bottom: 1rem;
-      color: #64ffda;
-    }
-    .card p { color: #d0d0d0; margin-bottom: 1.5rem; }
-    footer {
-      text-align: center;
-      padding: 1rem;
-      font-size: 0.9rem;
-      background: rgba(0,0,0,0.4);
-      border-top: 1px solid rgba(255,255,255,0.1);
-    }
-    @media (max-width: 600px) {
-      header h1 { font-size: 2.8rem; }
-      header p { font-size: 1rem; }
-    }
-  </style>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Index of .</title>
+    <style>
+        :root {
+            --bg-color: #2a2a2e;
+            --text-color: #f9f9fa;
+            --accent-color: #0060df;
+            --hover-color: #0a84ff;
+            --border-color: #4a4a4f;
+            --row-hover: #35353b;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            background-color: #32323a;
+        }
+        header {
+            background-color: var(--accent-color);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        .controls select {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .controls button {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .controls button:hover {
+            background-color: rgba(255, 255, 255, 0.25);
+        }
+        .search-bar {
+            padding: 10px 20px;
+            background-color: #42424a;
+        }
+        #search {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background-color: #2a2a2e;
+            color: var(--text-color);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            padding: 12px 20px;
+            text-align: left;
+            background-color: #42424a;
+            position: sticky;
+            top: 0;
+            cursor: pointer;
+        }
+        th:hover {
+            background-color: #4a4a54;
+        }
+        td {
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        tr:hover {
+            background-color: var(--row-hover);
+        }
+        a {
+            color: var(--text-color);
+            text-decoration: none;
+            display: block;
+        }
+        a:hover {
+            color: var(--hover-color);
+        }
+        .folder {
+            color: #45a1ff;
+        }
+        .folder:before {
+            content: '📁 ';
+        }
+        .file:before {
+            content: '📄 ';
+        }
+        .size, .date {
+            text-align: right;
+            white-space: nowrap;
+        }
+        footer {
+            text-align: center;
+            padding: 15px;
+            background-color: #32323a;
+            color: #b1b1b3;
+            font-size: 0.9rem;
+        }
+        .theme-switcher {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+        }
+        .light-theme {
+            --bg-color: #f9f9fa;
+            --text-color: #0c0c0d;
+            --border-color: #d7d7db;
+            --row-hover: #e7e7e7;
+        }
+        @media (max-width: 768px) {
+            .date {
+                display: none;
+            }
+        }
+    </style>
 </head>
 <body>
-  <header>
-  </header>
-  <main>
-    <div class="card">
-      <h2>About the Project</h2>
-      <p>MicroForge is a curated collection of personal libraries crafted for building robust, modern applications. Embrace simplicity, efficiency, and style.</p>
+    <div class='container'>
+        <header>
+            <h1>Index of .</h1>
+            <div class='controls'>
+                <select id='view-mode'>
+                    <option value='list'>List View</option>
+                    <option value='grid'>Grid View</option>
+                </select>
+                <button id='theme-toggle'>Toggle Theme</button>
+            </div>
+        </header>
+        <div class='search-bar'>
+            <input type='text' id='search' placeholder='Search files and folders...'>
+        </div>
+        <div class='table-container'>
+            <table>
+                <thead>
+                    <tr>
+                        <th data-sort='name'>Name</th>
+                        <th data-sort='size' class='size'>Size</th>
+                        <th data-sort='date' class='date'>Last Modified</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><a href='.' class='folder'>..</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>-</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./..' class='folder'>..</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-05 09:36:26</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./.git' class='folder'>.git</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-05 09:22:57</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./assets' class='folder'>assets</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-03-04 13:56:27</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./Crossline' class='folder'>Crossline</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-05 08:16:49</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./DeployMe' class='folder'>DeployMe</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-03-24 16:46:27</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./flag.h' class='folder'>flag.h</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-02 16:52:40</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./HTTP' class='folder'>HTTP</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-05 10:20:08</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./Lexer' class='folder'>Lexer</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-03-31 15:38:10</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./MEnv' class='folder'>MEnv</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-03-24 16:46:46</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./MSCL' class='folder'>MSCL</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-03-24 16:46:52</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./Utils' class='folder'>Utils</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-05 10:26:56</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./vector.h' class='folder'>vector.h</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-01 17:06:03</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./xam' class='folder'>xam</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-02 16:45:30</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./XDB' class='folder'>XDB</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-05 09:33:13</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./xevent.h' class='folder'>xevent.h</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-01 20:04:54</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./XLib' class='folder'>XLib</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-03 17:31:33</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./XLine' class='folder'>XLine</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-03-26 22:15:00</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./XLua' class='folder'>XLua</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-03-30 14:40:55</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./xmalloc' class='folder'>xmalloc</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-01 18:03:44</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./XProject' class='folder'>XProject</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-03-30 17:30:29</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./xui' class='folder'>xui</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-03 15:30:09</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./XWBin' class='folder'>XWBin</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-04-04 20:33:05</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./zhah' class='folder'>zhah</a></td>
+                        <td class='size'>-</td>
+                        <td class='date'>2025-03-23 19:21:05</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./.gitignore' class='file'>.gitignore</a></td>
+                        <td class='size'>5 B</td>
+                        <td class='date'>2025-02-02 19:52:00</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./BLOCKLIST' class='file'>BLOCKLIST</a></td>
+                        <td class='size'>0 B</td>
+                        <td class='date'>2025-02-17 12:31:07</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./index.html' class='file'>index.html</a></td>
+                        <td class='size'>3.5 KB</td>
+                        <td class='date'>2025-03-04 14:13:26</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./LICENSE' class='file'>LICENSE</a></td>
+                        <td class='size'>2.7 KB</td>
+                        <td class='date'>2025-02-25 21:10:11</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./Makefile' class='file'>Makefile</a></td>
+                        <td class='size'>656 B</td>
+                        <td class='date'>2025-04-05 10:27:29</td>
+                    </tr>
+                    <tr>
+                        <td><a href='./README.md' class='file'>README.md</a></td>
+                        <td class='size'>23 B</td>
+                        <td class='date'>2025-03-04 13:45:20</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <footer>
+            <p>Generated on Mar 17 2025</p>
+            <div class='theme-switcher'>
+                <button id='theme-toggle-bottom'>Switch Theme</button>
+            </div>
+        </footer>
     </div>
-    <div class="card">
-      <h2>Explore the Libraries</h2>
-      <p>Dive into an assortment of tools and utilities designed to streamline your development workflow. Discover innovative solutions for your projects.</p>
-      <p>Visit the <a href="https://github.com/zhrexx/MicroForge" target="_blank" rel="noopener noreferrer">GitHub Repository</a> for more details.</p>
-    </div>
-    <div class="card">
-      <h2>Get Started</h2>
-      <p>Integrate these libraries into your workflow seamlessly. Check out the documentation on GitHub for installation and usage instructions. Contributions are welcome.</p>
-    </div>
-  </main>
-  <footer>
-    &copy; 2025 MicroForge | <a href="https://github.com/zhrexx/MicroForge" target="_blank" rel="noopener noreferrer">GitHub</a>
-  </footer>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeToggleBottom = document.getElementById('theme-toggle-bottom');
+            const body = document.body;
+            const viewMode = document.getElementById('view-mode');
+            const searchInput = document.getElementById('search');
+            const tableHeaders = document.querySelectorAll('th[data-sort]');
+            const tableRows = document.querySelectorAll('tbody tr');
+            
+            function toggleTheme() {
+                body.classList.toggle('light-theme');
+                const isLightTheme = body.classList.contains('light-theme');
+                localStorage.setItem('lightTheme', isLightTheme);
+            }
+            
+            if (localStorage.getItem('lightTheme') === 'true') {
+                body.classList.add('light-theme');
+            }
+            
+            themeToggle.addEventListener('click', toggleTheme);
+            themeToggleBottom.addEventListener('click', toggleTheme);
+            
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                
+                tableRows.forEach(row => {
+                    const fileName = row.querySelector('a').textContent.toLowerCase();
+                    if (fileName === '..') {
+                        row.style.display = '';
+                        return;
+                    }
+                    
+                    if (fileName.includes(searchTerm)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            });
+            
+            let currentSort = { column: 'name', direction: 'asc' };
+            
+            function sortTable(column) {
+                const tableBody = document.querySelector('tbody');
+                const rows = Array.from(tableRows);
+                const parentRow = rows.shift();
+                
+                if (currentSort.column === column) {
+                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.column = column;
+                    currentSort.direction = 'asc';
+                }
+                
+                rows.sort((a, b) => {
+                    const aIsFolder = a.querySelector('a').classList.contains('folder');
+                    const bIsFolder = b.querySelector('a').classList.contains('folder');
+                    
+                    if (aIsFolder && !bIsFolder) return -1;
+                    if (!aIsFolder && bIsFolder) return 1;
+                    
+                    let aValue, bValue;
+                    
+                    if (column === 'name') {
+                        aValue = a.querySelector('a').textContent.toLowerCase();
+                        bValue = b.querySelector('a').textContent.toLowerCase();
+                    } else if (column === 'size') {
+                        const aSizeText = a.querySelector('.size').textContent;
+                        const bSizeText = b.querySelector('.size').textContent;
+                        
+                        if (aSizeText === '-') aValue = 0;
+                        else {
+                            const aSizeVal = parseFloat(aSizeText);
+                            if (aSizeText.includes('KB')) aValue = aSizeVal * 1024;
+                            else if (aSizeText.includes('MB')) aValue = aSizeVal * 1024 * 1024;
+                            else if (aSizeText.includes('GB')) aValue = aSizeVal * 1024 * 1024 * 1024;
+                            else aValue = aSizeVal;
+                        }
+                        
+                        if (bSizeText === '-') bValue = 0;
+                        else {
+                            const bSizeVal = parseFloat(bSizeText);
+                            if (bSizeText.includes('KB')) bValue = bSizeVal * 1024;
+                            else if (bSizeText.includes('MB')) bValue = bSizeVal * 1024 * 1024;
+                            else if (bSizeText.includes('GB')) bValue = bSizeVal * 1024 * 1024 * 1024;
+                            else bValue = bSizeVal;
+                        }
+                    } else if (column === 'date') {
+                        aValue = new Date(a.querySelector('.date').textContent);
+                        bValue = new Date(b.querySelector('.date').textContent);
+                    }
+                    
+                    if (currentSort.direction === 'asc') {
+                        return aValue > bValue ? 1 : -1;
+                    } else {
+                        return aValue < bValue ? 1 : -1;
+                    }
+                });
+                
+                while (tableBody.firstChild) {
+                    tableBody.removeChild(tableBody.firstChild);
+                }
+                
+                tableBody.appendChild(parentRow);
+                
+                rows.forEach(row => {
+                    tableBody.appendChild(row);
+                });
+            }
+            
+            tableHeaders.forEach(header => {
+                header.addEventListener('click', function() {
+                    const column = this.getAttribute('data-sort');
+                    sortTable(column);
+                });
+            });
+            
+            viewMode.addEventListener('change', function() {
+                const tableContainer = document.querySelector('.table-container');
+                if (this.value === 'grid') {
+                    tableContainer.innerHTML = `
+                        <div class='grid-view'>
+                            <div class='grid-item parent-dir'>
+                                <a href='.' class='folder'>..</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./..' class='folder'>..</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./.git' class='folder'>.git</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./assets' class='folder'>assets</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./Crossline' class='folder'>Crossline</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./DeployMe' class='folder'>DeployMe</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./flag.h' class='folder'>flag.h</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./HTTP' class='folder'>HTTP</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./Lexer' class='folder'>Lexer</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./MEnv' class='folder'>MEnv</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./MSCL' class='folder'>MSCL</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./Utils' class='folder'>Utils</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./vector.h' class='folder'>vector.h</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./xam' class='folder'>xam</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./XDB' class='folder'>XDB</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./xevent.h' class='folder'>xevent.h</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./XLib' class='folder'>XLib</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./XLine' class='folder'>XLine</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./XLua' class='folder'>XLua</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./xmalloc' class='folder'>xmalloc</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./XProject' class='folder'>XProject</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./xui' class='folder'>xui</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./XWBin' class='folder'>XWBin</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./zhah' class='folder'>zhah</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./.gitignore' class='file'>.gitignore</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./BLOCKLIST' class='file'>BLOCKLIST</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./index.html' class='file'>index.html</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./LICENSE' class='file'>LICENSE</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./Makefile' class='file'>Makefile</a>
+                            </div>
+                            <div class='grid-item'>
+                                <a href='./README.md' class='file'>README.md</a>
+                            </div>
+                        </div>
+                    `;
+                    
+                    const style = document.createElement('style');
+                    style.id = 'grid-styles';
+                    style.textContent = `
+                        .grid-view {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                            gap: 15px;
+                            padding: 20px;
+                        }
+                        .grid-item {
+                            background-color: #42424a;
+                            border-radius: 6px;
+                            padding: 15px;
+                            text-align: center;
+                            transition: transform 0.2s, background-color 0.2s;
+                        }
+                        .grid-item:hover {
+                            background-color: var(--row-hover);
+                            transform: translateY(-3px);
+                        }
+                        .grid-item a {
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            height: 100%;
+                        }
+                        .grid-item a:before {
+                            font-size: 2rem;
+                            margin-bottom: 10px;
+                        }
+                        .parent-dir {
+                            background-color: var(--accent-color);
+                        }
+                        .light-theme .grid-item {
+                            background-color: #e0e0e6;
+                        }
+                        .light-theme .parent-dir {
+                            background-color: var(--accent-color);
+                        }
+                    `;
+                    document.head.appendChild(style);
+                } else {
+                    const gridStyles = document.getElementById('grid-styles');
+                    if (gridStyles) gridStyles.remove();
+                    
+                    tableContainer.innerHTML = `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-sort='name'>Name</th>
+                                    <th data-sort='size' class='size'>Size</th>
+                                    <th data-sort='date' class='date'>Last Modified</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><a href='.' class='folder'>..</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>-</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./..' class='folder'>..</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-05 09:36:26</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./.git' class='folder'>.git</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-05 09:22:57</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./assets' class='folder'>assets</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-03-04 13:56:27</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./Crossline' class='folder'>Crossline</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-05 08:16:49</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./DeployMe' class='folder'>DeployMe</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-03-24 16:46:27</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./flag.h' class='folder'>flag.h</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-02 16:52:40</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./HTTP' class='folder'>HTTP</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-05 10:20:08</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./Lexer' class='folder'>Lexer</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-03-31 15:38:10</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./MEnv' class='folder'>MEnv</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-03-24 16:46:46</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./MSCL' class='folder'>MSCL</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-03-24 16:46:52</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./Utils' class='folder'>Utils</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-05 10:26:56</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./vector.h' class='folder'>vector.h</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-01 17:06:03</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./xam' class='folder'>xam</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-02 16:45:30</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./XDB' class='folder'>XDB</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-05 09:33:13</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./xevent.h' class='folder'>xevent.h</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-01 20:04:54</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./XLib' class='folder'>XLib</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-03 17:31:33</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./XLine' class='folder'>XLine</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-03-26 22:15:00</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./XLua' class='folder'>XLua</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-03-30 14:40:55</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./xmalloc' class='folder'>xmalloc</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-01 18:03:44</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./XProject' class='folder'>XProject</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-03-30 17:30:29</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./xui' class='folder'>xui</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-03 15:30:09</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./XWBin' class='folder'>XWBin</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-04-04 20:33:05</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./zhah' class='folder'>zhah</a></td>
+                                    <td class='size'>-</td>
+                                    <td class='date'>2025-03-23 19:21:05</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./.gitignore' class='file'>.gitignore</a></td>
+                                    <td class='size'>5 B</td>
+                                    <td class='date'>2025-02-02 19:52:00</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./BLOCKLIST' class='file'>BLOCKLIST</a></td>
+                                    <td class='size'>0 B</td>
+                                    <td class='date'>2025-02-17 12:31:07</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./index.html' class='file'>index.html</a></td>
+                                    <td class='size'>3.5 KB</td>
+                                    <td class='date'>2025-03-04 14:13:26</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./LICENSE' class='file'>LICENSE</a></td>
+                                    <td class='size'>2.7 KB</td>
+                                    <td class='date'>2025-02-25 21:10:11</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./Makefile' class='file'>Makefile</a></td>
+                                    <td class='size'>656 B</td>
+                                    <td class='date'>2025-04-05 10:27:29</td>
+                                </tr>
+                                <tr>
+                                    <td><a href='./README.md' class='file'>README.md</a></td>
+                                    <td class='size'>23 B</td>
+                                    <td class='date'>2025-03-04 13:45:20</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    `;
+                    
+                    const newTableHeaders = document.querySelectorAll('th[data-sort]');
+                    newTableHeaders.forEach(header => {
+                        header.addEventListener('click', function() {
+                            const column = this.getAttribute('data-sort');
+                            sortTable(column);
+                        });
+                    });
+                }
+                
+                localStorage.setItem('viewMode', this.value);
+            });
+            
+            const savedViewMode = localStorage.getItem('viewMode');
+            if (savedViewMode) {
+                viewMode.value = savedViewMode;
+                viewMode.dispatchEvent(new Event('change'));
+            }
+        });
+    </script>
 </body>
 </html>
-

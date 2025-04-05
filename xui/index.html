@@ -13,6 +13,11 @@
     });
     
     app.state.set({clickedTimes: 0});
+    
+    const clickEvent = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true
+    });
 
     el.h1({}, "Hello, DOM");
     app.render();
@@ -27,5 +32,4 @@
     
     app.render();
     </script>
-
 </html>

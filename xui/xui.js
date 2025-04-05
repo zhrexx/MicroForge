@@ -695,6 +695,112 @@ class ElementFactories {
   main(attribs, ...children) { return this.create("main", attribs, ...children); }
 }
 
+class Component {
+  constructor(app, options = {}) {
+    this.app = app;
+    this.el = new window.gXWUI.ElementFactories(app);
+    this.options = { ...options };
+    this.state = new window.gXWUI.State();
+    this.element = null;
+    this.children = [];
+    this.id = options.id || `component-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  }
+
+  setState(updates) {
+    this.state.set(updates);
+    if (this.options.autoRender !== false) {
+      this.update();
+    }
+    return this;
+  }
+
+  getState() {
+    return this.state.get();
+  }
+
+  addChild(childComponent) {
+    if (childComponent instanceof Component) {
+      this.children.push(childComponent);
+    }
+    return this;
+  }
+
+  removeChild(childComponent) {
+    this.children = this.children.filter(child => child !== childComponent);
+    return this;
+  }
+
+  render() {
+    // This method should be overridden by subclasses
+    this.element = this.el.div({ id: this.id });
+    return this.element;
+  }
+
+  update() {
+    if (!this.element) {
+      return this;
+    }
+
+    const parent = this.element.render().parentNode;
+    if (!parent) {
+      return this;
+    }
+
+    const newElement = this.render();
+    parent.replaceChild(newElement.render(), this.element.render());
+    return this;
+  }
+
+  mount(container) {
+    if (typeof container === 'string') {
+      const domContainer = document.querySelector(container);
+      if (domContainer) {
+        domContainer.innerHTML = '';
+        domContainer.appendChild(this.render().render());
+      }
+    } else if (container instanceof Element) {
+      container.clearChildren();
+      container.child(this.render());
+    }
+    return this;
+  }
+
+  unmount() {
+    if (this.element) {
+      const domElement = document.getElementById(this.id);
+      if (domElement && domElement.parentNode) {
+        domElement.parentNode.removeChild(domElement);
+      }
+    }
+    return this;
+  }
+
+  destroy() {
+    this.unmount();
+    this.children.forEach(child => child.destroy());
+    this.children = [];
+    this.element = null;
+    return this;
+  }
+
+  on(event, callback) {
+    this.state.on(event, callback);
+    return this;
+  }
+
+  off(event, callback) {
+    this.state.off(event, callback);
+    return this;
+  }
+
+  emit(event, ...args) {
+    if (this.state.listeners[event]) {
+      this.state.listeners[event].forEach(listener => listener(...args));
+    }
+    return this;
+  }
+}
+
 function createXWUI(options = {}) {
   const app = new XWUI(options);
   const el = new ElementFactories(app);
@@ -709,5 +815,6 @@ window.gXWUI = {
   State,
   Router,
   Storage,
-  Http
+  Http,
+  Component,
 };

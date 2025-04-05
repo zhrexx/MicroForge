@@ -55,7 +55,6 @@ typedef enum {
     HM_POST,
     HM_UNKNOWN,
 } HTTP_Method;
-
 typedef struct {
     char *key;
     char *value;
