@@ -7,5 +7,4 @@ x.add_library_path(target, "./dependencies");
 x.add_link_library(target, "m");
 x.add_link_library(target, "lua");
 x.set_output_directory("./");
-x.compile_target(target)
-
+x.compile_target_parallel(target)

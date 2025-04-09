@@ -31,11 +31,15 @@ function xam:OS()
     return package.config:sub(1,1) == "\\" and "win" or "unix"
 end
 
+local target_win = "win" 
+local target_linux = "linux" 
+local target_linux_object = "linux_object"
+
 local config = {
     inputFile = "input.xam",
     outputFile = "output.fasm",
     entryPoint = "__entry",
-    target = (xam:OS() == "win") and "win" or "linux",
+    target = (xam:OS() == target_win) and target_win or target_linux,
     verbose = false,
     optimize = false,
     auto_compile = true,
@@ -83,7 +87,7 @@ while arg and i <= #arg do
 end
 
 local function generateHeader()
-    if config.target == "win" then
+    if config.target == target_win then
         return string.format([[
 format PE64 console
 entry %s
@@ -91,12 +95,22 @@ entry %s
 section '.text' code readable executable
 
 ]], config.entryPoint)
-    else
+    elseif config.target == target_linux then
         return string.format([[
 format ELF64 executable 3
 entry %s
 
 segment readable executable
+
+]], config.entryPoint)
+    elseif config.target == target_linux_object then
+        return string.format([[
+format ELF64
+global _start
+
+section '.text' executable
+_start: 
+    call %s 
 
 ]], config.entryPoint)
     end
@@ -450,12 +464,19 @@ local function processContent(content)
     output = output .. table.concat(code_section, "\n") .. "\n\n"
     
     if #data_section > 0 or #bss_section > 0 then
-        output = output .. "segment readable writeable\n\n"
-
+        if config.target ~= target_linux_object then
+            output = output .. "segment readable writeable\n\n"
+        else 
+            output = output .. "section '.data' writeable\n\n"
+        end
+        
         if #data_section > 0 then
             output = output .. table.concat(data_section, "\n") .. "\n"
         end
-        
+
+        if config.target == target_linux_object then 
+            output = output .. "section '.bss' writeable\n\n"
+        end
         if #bss_section > 0 then
             output = output .. table.concat(bss_section, "\n") .. "\n"
         end

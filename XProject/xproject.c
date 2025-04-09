@@ -1,3 +1,4 @@
+#include <cinttypes>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,13 +10,42 @@
 #include <direct.h>
 #include <windows.h>
 #define PLATFORM "win"
+
+#include <process.h>
+#define THREAD_HANDLE HANDLE
+#define MUTEX_HANDLE CRITICAL_SECTION
+#define MUTEX_INIT(mutex) InitializeCriticalSection(&mutex)
+#define MUTEX_LOCK(mutex) EnterCriticalSection(&mutex)
+#define MUTEX_UNLOCK(mutex) LeaveCriticalSection(&mutex)
+#define MUTEX_DESTROY(mutex) DeleteCriticalSection(&mutex)
+#define THREAD_CREATE(handle, func, arg) ((handle = (THREAD_HANDLE)_beginthreadex(NULL, 0, func, arg, 0, NULL)) != 0)
+#define THREAD_JOIN(handle) WaitForSingleObject(handle, INFINITE); CloseHandle(handle)
+#define THREAD_DETACH(handle) CloseHandle(handle)
+#define THREAD_RETURN_TYPE unsigned int WINAPI
+#define THREAD_RETURN 0
+#define SLEEP_MS(ms) Sleep(ms)
 #else
 #include <dirent.h>
 #include <unistd.h>
 #define PLATFORM "linux"
+
+#include <pthread.h>
+#define THREAD_HANDLE pthread_t
+#define MUTEX_HANDLE pthread_mutex_t
+#define MUTEX_INIT(mutex) pthread_mutex_init(&mutex, NULL)
+#define MUTEX_LOCK(mutex) pthread_mutex_lock(&mutex)
+#define MUTEX_UNLOCK(mutex) pthread_mutex_unlock(&mutex)
+#define MUTEX_DESTROY(mutex) pthread_mutex_destroy(&mutex)
+#define THREAD_CREATE(handle, func, arg) (pthread_create(&handle, NULL, func, arg) == 0)
+#define THREAD_JOIN(handle) pthread_join(handle, NULL)
+#define THREAD_DETACH(handle) pthread_detach(handle)
+#define THREAD_RETURN_TYPE void*
+#define THREAD_RETURN NULL
+#define SLEEP_MS(ms) usleep((ms) * 1000)
+
 #endif
 
-#include "dependencies/lua.h" 
+#include "dependencies/lua.h"
 #include "dependencies/lauxlib.h"
 #include "dependencies/lualib.h"
 
@@ -26,6 +56,7 @@
 #define MAX_SOURCES 128
 #define MAX_DEPENDENCIES 64
 #define MAX_FLAGS 64
+#define MAX_THREADS 8
 
 #ifdef _WIN32
 #define PATH_SEPARATOR "\\"
@@ -60,6 +91,11 @@ typedef struct {
 } BuildTarget;
 
 typedef struct {
+    BuildTarget* target;
+    int result;
+} CompileJob;
+
+typedef struct {
     BuildTarget targets[MAX_TARGETS];
     int target_count;
     char compiler[64];
@@ -69,6 +105,17 @@ typedef struct {
 } BuildSystem;
 
 BuildSystem build_system = {0};
+MUTEX_HANDLE job_mutex;
+int active_jobs = 0;
+int max_parallel_jobs = 4;
+
+void init_parallel_system() {
+    MUTEX_INIT(job_mutex);
+}
+
+void cleanup_parallel_system() {
+    MUTEX_DESTROY(job_mutex);
+}
 
 void log_error(const char* format, ...) {
     va_list args;
@@ -117,14 +164,14 @@ int gout = 0;
 int redirectOutput(const char *filename) {
     int original_stdout;
     FILE *fp;
-    
+
 #ifdef _WIN32
     original_stdout = _dup(_fileno(stdout));
     if (original_stdout == -1) {
         perror("Failed to duplicate stdout");
         return -1;
     }
-    
+
     fp = freopen(filename, "w", stdout);
 #else
     original_stdout = dup(STDOUT_FILENO);
@@ -132,10 +179,10 @@ int redirectOutput(const char *filename) {
         perror("Failed to duplicate stdout");
         return -1;
     }
-    
+
     fp = freopen(filename, "w", stdout);
 #endif
-    
+
     if (fp == NULL) {
         perror("Failed to redirect stdout");
 #ifdef _WIN32
@@ -147,7 +194,7 @@ int redirectOutput(const char *filename) {
 #endif
         return -1;
     }
-    
+
     return original_stdout;
 }
 
@@ -156,43 +203,43 @@ int restoreOutput(int original_stdout) {
         fprintf(stderr, "Invalid original stdout descriptor\n");
         return -1;
     }
-    
+
     fflush(stdout);
-    
+
 #ifdef _WIN32
     fclose(stdout);
-    
+
     if (_dup2(original_stdout, _fileno(stdout)) == -1) {
         perror("Failed to restore stdout");
         _close(original_stdout);
         return -1;
     }
-    
+
     FILE *fp = _fdopen(_fileno(stdout), "w");
     if (fp == NULL) {
         perror("Failed to reopen stdout");
         return -1;
     }
-    
+
     _close(original_stdout);
 #else
     fclose(stdout);
-    
+
     if (dup2(original_stdout, STDOUT_FILENO) == -1) {
         perror("Failed to restore stdout");
         close(original_stdout);
         return -1;
     }
-    
+
     FILE *fp = fdopen(STDOUT_FILENO, "w");
     if (fp == NULL) {
         perror("Failed to reopen stdout");
         return -1;
     }
-    
+
     close(original_stdout);
 #endif
-    
+
     return 0;
 }
 
@@ -235,7 +282,7 @@ void add_target_flag(BuildTarget* target, const char* flag) {
         }
     }
 
-    strncpy(target->custom_cflags[target->custom_cflags_count++], 
+    strncpy(target->custom_cflags[target->custom_cflags_count++],
             trimmed_flag, sizeof(trimmed_flag) - 1);
 }
 
@@ -275,7 +322,7 @@ char* read_file_contents(const char* path) {
 int write_file_contents(const char* path, const char* content) {
     FILE* file = fopen(path, "wb");
     if (!file) return 0;
-    
+
     size_t written = fwrite(content, 1, strlen(content), file);
     fclose(file);
 
@@ -342,7 +389,7 @@ int hash_file(const char* path, char* hash_result) {
     FILE* pipe;
     char cmd[MAX_COMMAND];
     snprintf(cmd, sizeof(cmd), "certutil -hashfile \"%s\" SHA256", path);
-    
+
     pipe = _popen(cmd, "r");
     if (!pipe) return 0;
 
@@ -356,7 +403,7 @@ int hash_file(const char* path, char* hash_result) {
     char cmd[MAX_COMMAND];
     FILE* pipe;
     snprintf(cmd, sizeof(cmd), "sha256sum %s", path);
-    
+
     pipe = popen(cmd, "r");
     if (!pipe) return 0;
 
@@ -473,21 +520,21 @@ void compile_target(BuildTarget* target) {
     switch (target->type) {
         case TARGET_EXECUTABLE:
             #ifdef _WIN32
-            snprintf(cmd, sizeof(cmd), "%s %s %s %s %s %s %s -o %s.exe", 
-                build_system.compiler, 
-                build_system.cflags, 
+            snprintf(cmd, sizeof(cmd), "%s %s %s %s %s %s %s -o %s.exe",
+                build_system.compiler,
+                build_system.cflags,
                 target_flags,
-                sources, 
+                sources,
                 build_include_flags(target),
                 build_library_flags(target),
                 build_system.ldflags,
                 output_path);
             #else
-            snprintf(cmd, sizeof(cmd), "%s %s %s %s %s %s %s -o %s", 
-                build_system.compiler, 
-                build_system.cflags, 
+            snprintf(cmd, sizeof(cmd), "%s %s %s %s %s %s %s -o %s",
+                build_system.compiler,
+                build_system.cflags,
                 target_flags,
-                sources, 
+                sources,
                 build_include_flags(target),
                 build_library_flags(target),
                 build_system.ldflags,
@@ -496,22 +543,22 @@ void compile_target(BuildTarget* target) {
             break;
         case TARGET_STATIC_LIB:
             #ifdef _WIN32
-            snprintf(cmd, sizeof(cmd), "lib /out:%s%s%s.lib %s", 
-                build_system.output_dir, 
+            snprintf(cmd, sizeof(cmd), "lib /out:%s%s%s.lib %s",
+                build_system.output_dir,
                 PATH_SEPARATOR,
-                target->name, 
+                target->name,
                 sources);
             #else
-            snprintf(cmd, sizeof(cmd), "ar rcs %s%s%s.a %s", 
-                build_system.output_dir, 
+            snprintf(cmd, sizeof(cmd), "ar rcs %s%s%s.a %s",
+                build_system.output_dir,
                 PATH_SEPARATOR,
-                target->name, 
+                target->name,
                 sources);
             #endif
             break;
         case TARGET_SHARED_LIB:
             #ifdef _WIN32
-            snprintf(cmd, sizeof(cmd), "%s -shared %s %s %s %s %s -o %s%s%s.dll", 
+            snprintf(cmd, sizeof(cmd), "%s -shared %s %s %s %s %s -o %s%s%s.dll",
                 build_system.compiler,
                 sources,
                 build_system.cflags,
@@ -522,7 +569,7 @@ void compile_target(BuildTarget* target) {
                 PATH_SEPARATOR,
                 target->name);
             #else
-            snprintf(cmd, sizeof(cmd), "%s -shared %s %s %s %s %s -o %s%s%s.so", 
+            snprintf(cmd, sizeof(cmd), "%s -shared %s %s %s %s %s -o %s%s%s.so",
                 build_system.compiler,
                 sources,
                 build_system.cflags,
@@ -540,6 +587,62 @@ void compile_target(BuildTarget* target) {
 
     system(cmd);
 }
+
+THREAD_RETURN_TYPE compile_worker(void* arg) {
+    CompileJob* job = (CompileJob*)arg;
+    compile_target(job->target);
+
+    MUTEX_LOCK(job_mutex);
+    active_jobs--;
+    MUTEX_UNLOCK(job_mutex);
+
+    free(job);
+    return THREAD_RETURN;
+}
+
+int compile_target_parallel(BuildTarget* target) {
+    MUTEX_LOCK(job_mutex);
+    while (active_jobs >= max_parallel_jobs) {
+        MUTEX_UNLOCK(job_mutex);
+        SLEEP_MS(10);  // 10ms
+        MUTEX_LOCK(job_mutex);
+    }
+
+    CompileJob* job = malloc(sizeof(CompileJob));
+    if (!job) {
+        MUTEX_UNLOCK(job_mutex);
+        return 0;
+    }
+
+    job->target = target;
+    job->result = 0;
+
+    THREAD_HANDLE thread;
+    if (THREAD_CREATE(thread, compile_worker, job)) {
+        active_jobs++;
+        THREAD_DETACH(thread);
+    } else {
+        free(job);
+        MUTEX_UNLOCK(job_mutex);
+        return 0;
+    }
+
+    MUTEX_UNLOCK(job_mutex);
+    return 1;
+}
+
+void wait_for_compilation() {
+    while (1) {
+        MUTEX_LOCK(job_mutex);
+        int jobs = active_jobs;
+        MUTEX_UNLOCK(job_mutex);
+
+        if (jobs == 0) break;
+        SLEEP_MS(100);  // 100ms
+    }
+}
+
+int dmode = 1;
 
 static int lua_check_library(lua_State* L) {
     const char* library = luaL_checkstring(L, 1);
@@ -567,6 +670,7 @@ static int lua_directory_exists(lua_State* L) {
 
 static int lua_system_command(lua_State* L) {
     const char* command = luaL_checkstring(L, 1);
+    if (dmode) printf("Executing '%s'\n", command);
     lua_pushinteger(L, system_command(command));
     return 1;
 }
@@ -616,6 +720,7 @@ static int lua_add_link_library(lua_State* L) {
 
 static int lua_compile_target(lua_State* L) {
     BuildTarget* target = lua_touserdata(L, 1);
+    if (dmode) printf("Compiling target %s\n", target->name);
     compile_target(target);
     return 0;
 }
@@ -691,6 +796,26 @@ static int lua_set_output_directory(lua_State *L) {
     return 0;
 }
 
+static int lua_set_max_jobs(lua_State* L) {
+    int jobs = luaL_checkinteger(L, 1);
+    if (jobs > 0 && jobs <= MAX_THREADS) {
+        max_parallel_jobs = jobs;
+    }
+    return 0;
+}
+
+static int lua_compile_target_parallel(lua_State* L) {
+    BuildTarget* target = lua_touserdata(L, 1);
+    if (dmode) printf("Compiling target %s\n", target->name);
+    lua_pushboolean(L, compile_target_parallel(target));
+    return 1;
+}
+
+static int lua_wait_for_compilation(lua_State* L) {
+    wait_for_compilation();
+    return 0;
+}
+
 void setup_lua_functions(lua_State* L) {
     lua_newtable(L);
 
@@ -715,7 +840,10 @@ void setup_lua_functions(lua_State* L) {
     push_function(L, lua_get_platform, "get_platform");
     push_function(L, lua_redirect_output, "redirect_output");
     push_function(L, lua_restore_output, "restore_output");
-    push_function(L, lua_set_output_directory, "set_output_directory"); 
+    push_function(L, lua_set_output_directory, "set_output_directory");
+    push_function(L, lua_compile_target_parallel, "compile_target_parallel");
+    push_function(L, lua_wait_for_compilation, "wait_for_compilation");
+    push_function(L, lua_set_max_jobs, "set_max_jobs");
 
     lua_setglobal(L, "x");
 
@@ -740,6 +868,8 @@ int main(int argc, char* argv[]) {
 
     strcpy(build_system.output_dir, "build");
 
+    init_parallel_system();
+
     lua_State* L = luaL_newstate();
     luaL_openlibs(L);
     setup_lua_functions(L);
@@ -749,5 +879,6 @@ int main(int argc, char* argv[]) {
     }
 
     lua_close(L);
+    cleanup_parallel_system();
     return 0;
 }

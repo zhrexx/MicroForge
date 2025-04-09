@@ -4,9 +4,10 @@
 int main(int argc, char *argv[])
 {
 
-    void *a = xmalloc(10);
-    int b = 10;
-    a = &b;
-    printf("%d", *(int *)a);
+    int *a = xmalloc(10);
+    *a = 10;
+    printf("%d\n", *(int *)a);
+    xfree(a);
+    printf("%d\n", *(int *)a);
     return 0;
 }

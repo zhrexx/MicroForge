@@ -1,35 +1,36 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-    <script src="xui.js"></script> 
+    <script src="xui.js"></script>
     <script>
-    const { app, el } = gXWUI.create({ title: 'My XWUI App' });
-    
-    app.style.create('button', {
-        backgroundColor: '#4CAF50',
-        color: 'white',
-        padding: '10px 15px',
-        border: 'none',
-        borderRadius: '4px'
-    });
-    
-    app.state.set({clickedTimes: 0});
-    
-    const clickEvent = new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true
-    });
+        const { app, el } = gXWUI.create({ title: "My XWUI App" });
 
-    el.h1({}, "Hello, DOM");
-    app.render();
-    const timesDisplay = el.p({}, "Clicked Times: " + app.state.$.clickedTimes);
-    const button = el.button({}, "Click Me")
-        .on('click', (e) => {
-            timesDisplay.text("Clicked Times: " + (app.state.$.clickedTimes += 1));
-            app.render();
+        app.style.create("button", {
+            backgroundColor: "blue",
+            color: "white",
+            padding: "10px 15px",
+            border: "none",
+            borderRadius: "4px",
         });
 
-    app.style.apply(button, 'button');
-    
-    app.render();
+        app.state.set({ clickedTimes: 0 });
+
+        const clickEvent = new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+        });
+
+        el.h1({}, "Hello, DOM");
+
+        app.render();
+        const timesDisplay = el.p(
+            {},
+            "Clicked Times: " + app.state.$.clickedTimes,
+        );
+        const button = el.button({}, "Click Me").on("click", (e) => {
+            timesDisplay.text("Clicked Times: " + app.state.$.clickedTimes++);
+            app.render();
+        });
+        el.create("html", {});
+        app.style.apply(button, "button");
     </script>
 </html>
