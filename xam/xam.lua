@@ -112,7 +112,7 @@ format ELF64
 public _start
 section '.text' executable
 _start: 
-
+    call %s 
 ]], config.entryPoint)
     end
 end
@@ -533,6 +533,7 @@ local function main()
     
     local content = parseInputFile(config.inputFile)
     content = preprocessContent(content)
+    header = generateHeader()
     local processed = processContent(content)
     writeOutputFile(config.outputFile, processed)
     
