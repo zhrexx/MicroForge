@@ -67,6 +67,7 @@ while arg and i <= #arg do
         i = i + 2
     elseif arg[i] == "--no-auto-compile" then 
         config.auto_compile = false;
+        i = i + 1
     elseif arg[i] == "-h" or arg[i] == "--help" then
         printBanner()
         print("Usage: xam [options]")
@@ -78,6 +79,7 @@ while arg and i <= #arg do
         print("  --optimize           Enable basic optimizations")
         print("  --target TARGET_OS   Set a target os");
         print("  -h, --help           Show this help message")
+        print("  --no-auto-compile    allows to disable auto compilation")
         os.exit(0)
     else
         if i == 1 then config.inputFile = arg[i] end
@@ -106,11 +108,10 @@ segment readable executable
     elseif config.target == target_linux_object then
         return string.format([[
 format ELF64
-global _start
 
+public _start
 section '.text' executable
 _start: 
-    call %s 
 
 ]], config.entryPoint)
     end
@@ -271,6 +272,15 @@ local function handlePreprocessorDirective(line)
         end
         return ""
     
+    elseif directive == "entry" then
+        local entryLabel = operands:match("^([%w_]+)%s*$")
+        if entryLabel then
+            config.entryPoint = entryLabel
+            log("Entry point set to: " .. entryLabel, colors.yellow)
+        else
+            errorExit("Invalid !entry syntax: " .. line)
+        end
+        return ""
     else
         errorExit("Unknown preprocessor directive: !" .. directive)
     end
@@ -501,7 +511,7 @@ local function writeOutputFile(filename, content)
 end
 
 local function auto_compile() 
-    if config.target == "linux" then 
+    if config.target == target_linux or config.target == target_linux_object then 
         os.execute(string.format("fasm %s", config.outputFile))
     else 
         os.execute(string.format("fasm.exe %s", config.outputFile))
