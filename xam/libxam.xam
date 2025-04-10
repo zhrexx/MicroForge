@@ -148,7 +148,95 @@ exit:
     ret
 
 
+macro ccall proc,[arg] { 
+    common
+    local size
+    size = 0
+    mov ebp,esp
+    if ~ arg eq
+    forward
+     size = size + 4
+    common
+     sub esp,size
+     end if
+     and esp,-16
+     if ~ arg eq
+     add esp,size
+    reverse
+     pushd arg
+    common
+     end if
+     call proc
+     mov esp,ebp 
+}
 
+; Usage: ccall proc_name, [arg1, arg2, ...]
+macro ccall proc,[args]
+{
+    local arg_count, shadow_space, stack_size, align_size
+    
+    arg_count = 0
+    
+    if ~ args eq
+        forward
+            arg_count = arg_count + 1
+        common
+    end if
+    
+    shadow_space = 32
+    
+    if arg_count > 4
+        stack_size = (arg_count - 4) * 8 + shadow_space
+    else
+        stack_size = shadow_space
+    end if
+    
+    align_size = (16 - (stack_size mod 16)) and 15
+    stack_size = stack_size + align_size
+    
+    push rbp
+    mov rbp, rsp
+    
+    sub rsp, stack_size
+    
+    if arg_count > 0
+        mov rcx, args
+    end if
+    if arg_count > 1
+        forward
+            if @# = 2
+                mov rdx, args
+            end if
+        common
+    end if
+    if arg_count > 2
+        forward
+            if @# = 3
+                mov r8, args
+            end if
+        common
+    end if
+    if arg_count > 3
+        forward
+            if @# = 4
+                mov r9, args
+            end if
+        common
+    end if
+    
+    if arg_count > 4
+        forward
+            if @# > 4
+                mov [rsp + shadow_space + (@# - 5) * 8], args
+            end if
+        common
+    end if
+    
+    call proc
+    
+    mov rsp, rbp
+    pop rbp
+}
 
 
 

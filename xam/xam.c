@@ -2,6 +2,11 @@
 #include "deps/lauxlib.h"
 #include "deps/lualib.h"
 #include "xam.h"
+#ifdef WIN32 
+#define PLATFORM "win" 
+#else 
+#define PLATFORM "linux"
+#endif 
 
 int main(int argc, char **argv) {
     lua_State *L = luaL_newstate();
@@ -13,6 +18,8 @@ int main(int argc, char **argv) {
         lua_rawseti(L, -2, i);
     }
     lua_setglobal(L, "arg");
+    lua_pushstring(L, PLATFORM);
+    lua_setglobal(L, "platform");
 
     if (argc == 0) {
         lua_pushstring(L, "");
