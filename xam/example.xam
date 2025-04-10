@@ -1,8 +1,9 @@
-;!include "libxam.xam"
+!include "libxam.xam"
 
 hello_world: db 'Hello World!', 10, 0
+platform: db '__PLATFORM__', 0
 __entry:
     xor rdi, rdi
-    
-example: rb 10
+    call exit
 
+example: rb 10

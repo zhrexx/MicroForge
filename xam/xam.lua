@@ -20,9 +20,9 @@ local function printBanner()
  ╚███╔╝ ███████║██╔████╔██║
  ██╔██╗ ██╔══██║██║╚██╔╝██║
 ██╔╝ ██╗██║  ██║██║ ╚═╝ ██║
-╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝ 
+╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝
     ]]
-    
+
     io.write(colors.bright_cyan, banner, colors.reset, "\n")
     io.write(colors.cyan, "Your Favorite Assembler v1.0", colors.reset, "\n\n")
 end
@@ -31,15 +31,15 @@ function xam:OS()
     return package.config:sub(1,1) == "\\" and "win" or "unix"
 end
 
-local target_win = "win" 
-local target_linux = "linux" 
+local target_win = "win"
+local target_linux = "linux"
 local target_linux_object = "linux_object"
 
 local config = {
     inputFile = "input.xam",
     outputFile = "output.fasm",
     entryPoint = "__entry",
-    target = (xam:OS() == target_win) and target_win or target_linux,
+    target = platform and platform or (xam:OS() == target_win) and target_win or target_linux,
     verbose = false,
     optimize = false,
     auto_compile = true,
@@ -62,10 +62,10 @@ while arg and i <= #arg do
     elseif arg[i] == "--optimize" then
         config.optimize = true
         i = i + 1
-    elseif arg[i] == "--target" then 
+    elseif arg[i] == "--target" then
         config.target = arg[i+1]
         i = i + 2
-    elseif arg[i] == "--no-auto-compile" then 
+    elseif arg[i] == "--no-auto-compile" then
         config.auto_compile = false;
         i = i + 1
     elseif arg[i] == "-h" or arg[i] == "--help" then
@@ -111,8 +111,8 @@ format ELF64
 
 public _start
 section '.text' executable
-_start: 
-    call %s 
+_start:
+    call %s
 ]], config.entryPoint)
     end
 end
@@ -136,11 +136,11 @@ local function parseInputFile(filename)
     if not file then
         errorExit("Could not open input file: " .. (err or filename))
     end
-    
+
     log("Reading input file: " .. filename)
     local content = file:read("*all")
     file:close()
-    
+
     return content
 end
 
@@ -172,26 +172,30 @@ local function expandDefines(line)
     return line
 end
 
+local function appendDefine(name, value)
+    preprocessor.defines[name] = value
+end
+
 local function handlePreprocessorDirective(line)
     local directive, operands = line:match("^!([%w_]+)%s*(.*)$")
     if not directive then return line end
-    
+
     directive = directive:lower()
     log("Preprocessing directive: !" .. directive .. " " .. (operands or ""), colors.yellow)
-    
+
     if not preprocessor.currentCondition then
         if directive == "endif" then
             table.remove(preprocessor.conditionalStack)
-            preprocessor.currentCondition = 
-                #preprocessor.conditionalStack == 0 or 
+            preprocessor.currentCondition =
+                #preprocessor.conditionalStack == 0 or
                 preprocessor.conditionalStack[#preprocessor.conditionalStack]
         elseif directive == "else" and #preprocessor.conditionalStack > 0 then
-            preprocessor.currentCondition = 
+            preprocessor.currentCondition =
                 not preprocessor.conditionalStack[#preprocessor.conditionalStack]
         end
         return ""
     end
-    
+
     if directive == "define" then
         local name, value = operands:match("^([%w_]+)%s*(.*)$")
         if name then
@@ -201,7 +205,7 @@ local function handlePreprocessorDirective(line)
             errorExit("Invalid !define syntax: " .. line)
         end
         return ""
-    
+
     elseif directive == "undef" then
         local name = operands:match("^([%w_]+)%s*$")
         if name then
@@ -211,57 +215,57 @@ local function handlePreprocessorDirective(line)
             errorExit("Invalid !undef syntax: " .. line)
         end
         return ""
-    
+
     elseif directive == "ifdef" or directive == "ifndef" then
         local name = operands:match("^([%w_]+)%s*$")
         if name then
             local isDefined = preprocessor.defines[name] ~= nil
             if directive == "ifndef" then isDefined = not isDefined end
-            
+
             table.insert(preprocessor.conditionalStack, isDefined)
             preprocessor.currentCondition = isDefined
-            
+
             log("Conditional " .. directive .. " " .. name .. ": " .. tostring(isDefined), colors.yellow)
         else
             errorExit("Invalid " .. directive .. " syntax: " .. line)
         end
         return ""
-    
+
     elseif directive == "else" then
         if #preprocessor.conditionalStack > 0 then
             local currentTop = preprocessor.conditionalStack[#preprocessor.conditionalStack]
             preprocessor.currentCondition = not currentTop
             preprocessor.conditionalStack[#preprocessor.conditionalStack] = not currentTop
-            
+
             log("Conditional else: " .. tostring(preprocessor.currentCondition), colors.yellow)
         else
             errorExit("!else without matching !ifdef/!ifndef")
         end
         return ""
-    
+
     elseif directive == "endif" then
         if #preprocessor.conditionalStack > 0 then
             table.remove(preprocessor.conditionalStack)
-            preprocessor.currentCondition = 
-                #preprocessor.conditionalStack == 0 or 
+            preprocessor.currentCondition =
+                #preprocessor.conditionalStack == 0 or
                 preprocessor.conditionalStack[#preprocessor.conditionalStack]
-            
+
             log("Conditional endif", colors.yellow)
         else
             errorExit("!endif without matching !ifdef/!ifndef")
         end
         return ""
-    
+
     elseif directive == "include" then
-        local filename = operands:match("^\"([^\"]+)\"$") or 
+        local filename = operands:match("^\"([^\"]+)\"$") or
                         operands:match("^<([^>]+)>$")
-        
+
         if filename then
             return resolveIncludePath(filename)
         else
             errorExit("Invalid !include syntax: " .. line)
         end
-    
+
     elseif directive == "includepath" then
         local path = operands:match("^\"([^\"]+)\"$")
         if path then
@@ -271,7 +275,7 @@ local function handlePreprocessorDirective(line)
             errorExit("Invalid !includepath syntax: " .. line)
         end
         return ""
-    
+
     elseif directive == "entry" then
         local entryLabel = operands:match("^([%w_]+)%s*$")
         if entryLabel then
@@ -289,21 +293,21 @@ end
 local function preprocessContent(content)
     local lines = {}
     local result = {}
-    
+
     preprocessor.defines = {}
     preprocessor.conditionalStack = {}
     preprocessor.currentCondition = true
     preprocessor.includePaths = {"./"}
-    
+
     for line in content:gmatch("[^\r\n]+") do
         table.insert(lines, line)
     end
-    
+
     log("Preprocessing " .. #lines .. " lines")
-    
+
     for _, line in ipairs(lines) do
         local trimmed = line:match("^%s*(.-)%s*$")
-        
+
         if trimmed:match("^!") then
             local processedLine = handlePreprocessorDirective(trimmed)
             if processedLine and #processedLine > 0 then
@@ -318,20 +322,20 @@ local function preprocessContent(content)
             end
         end
     end
-    
+
     if #preprocessor.conditionalStack > 0 then
         errorExit("Unclosed conditional directive (!ifdef/!ifndef without matching !endif)")
     end
-    
+
     return table.concat(result, "\n")
 end
 
 local function optimizeCode(lines)
     if not config.optimize then return lines end
-    
+
     log("Applying basic optimizations...", colors.yellow)
     local result = {}
-    
+
     local lastWasEmpty = false
     for _, line in ipairs(lines) do
         local isEmpty = (line:match("^%s*$") ~= nil)
@@ -340,7 +344,7 @@ local function optimizeCode(lines)
         end
         lastWasEmpty = isEmpty
     end
-    
+
     return result
 end
 
@@ -350,17 +354,17 @@ local function extractDataLabels(content)
         local trimmed = line:match("^%s*(.-)%s*$")
         trimmed = trimmed:gsub(";.*", "")
         trimmed = trimmed:match("^%s*(.-)%s*$")
-        
+
         if #trimmed > 0 then
             local label, str = trimmed:match("^([%w_]+):%s*db%s+'([^']*)'")
             if not label or not str then
                 label, str = trimmed:match("^([%w_]+):%s*db%s+\"([^\"]*)\"")
             end
-            
+
              if not label then
                 label, str = trimmed:match("^([%w_]+):%s*db%s+(%d+)")
             end
-            
+
             if label and str then
                 local num = tonumber(str)
                 data_labels[label] = num or str
@@ -385,52 +389,52 @@ local function substituteBuiltins(line, data_labels)
             errorExit("strlen: undefined data label '" .. label .. "'")
         end
     end)
-    
+
     line = line:gsub("__FILE__", config.inputFile)
     line = line:gsub("__DATE__", os.date("%Y-%m-%d"))
     line = line:gsub("__TIME__", os.date("%H:%M:%S"))
-
+    line = line:gsub("__PLATFORM__", config.target)
     return line
 end
 
 local function processContent(content)
     local lines = {}
     local data_section = {}
-    local bss_section = {} 
+    local bss_section = {}
     local code_section = {}
     local has_entry = false
     local entry_count = 0
-    
+
     for line in content:gmatch("[^\r\n]+") do
         table.insert(lines, line)
     end
-    
+
     log("Processing " .. #lines .. " lines of code")
-    
+
     local data_labels = extractDataLabels(content)
-    
+
     for _, line in ipairs(lines) do
         local trimmed = line:match("^%s*(.-)%s*$")
         trimmed = trimmed:gsub(";.*", "")
         trimmed = trimmed:match("^%s*(.-)%s*$")
-        
+
         if #trimmed > 0 then
             local isData = false
             local isBSS = false
 
-            if trimmed:match(":%s*db%s+") or 
-               trimmed:match(":%s*dw%s+") or 
-               trimmed:match(":%s*dd%s+") or 
-               trimmed:match(":%s*dq%s+") then 
+            if trimmed:match(":%s*db%s+") or
+               trimmed:match(":%s*dw%s+") or
+               trimmed:match(":%s*dd%s+") or
+               trimmed:match(":%s*dq%s+") then
                 isData = true
             end
-            
+
             if trimmed:match(":%s*rb%s+") or
                trimmed:match(":%s*rw%s+") or
                trimmed:match(":%s*rd%s+") or
                trimmed:match(":%s*rq%s+") then
-                isBSS = true     
-            end 
+                isBSS = true
+            end
 
             if isData then
                 local processed_line = substituteBuiltins(trimmed, data_labels)
@@ -442,12 +446,12 @@ local function processContent(content)
                 log("BSS: " .. trimmed, colors.blue)
             else
                 local processed_line = substituteBuiltins(trimmed, data_labels)
-                
+
                 if processed_line:match("^" .. config.entryPoint .. ":") then
                     has_entry = true
                     entry_count = entry_count + 1
                 end
-                
+
                 if processed_line:sub(-1) == ':' then
                     table.insert(code_section, processed_line)
                 else
@@ -457,34 +461,34 @@ local function processContent(content)
             end
         end
     end
-    
+
     if not has_entry then
         errorExit("No '" .. config.entryPoint .. ":' label found in the input file.")
     elseif entry_count > 1 then
         log("WARNING: Multiple entry points found, using the first one", colors.yellow)
     end
-    
+
     if config.optimize then
         code_section = optimizeCode(code_section)
         data_section = optimizeCode(data_section)
         bss_section = optimizeCode(bss_section)
     end
-    
+
     local output = header
     output = output .. table.concat(code_section, "\n") .. "\n\n"
-    
+
     if #data_section > 0 or #bss_section > 0 then
         if config.target ~= target_linux_object then
             output = output .. "segment readable writeable\n\n"
-        else 
+        else
             output = output .. "section '.data' writeable\n\n"
         end
-        
+
         if #data_section > 0 then
             output = output .. table.concat(data_section, "\n") .. "\n"
         end
 
-        if config.target == target_linux_object then 
+        if config.target == target_linux_object then
             output = output .. "section '.bss' writeable\n\n"
         end
         if #bss_section > 0 then
@@ -492,9 +496,9 @@ local function processContent(content)
         end
 
     end
-    
+
     log("Generated " .. #code_section .. " code lines and " .. #data_section .. " data lines")
-    
+
     return output
 end
 
@@ -503,45 +507,46 @@ local function writeOutputFile(filename, content)
     if not file then
         errorExit("Could not open output file: " .. (err or filename))
     end
-    
+
     file:write(content)
     file:close()
-    
+
     io.write(colors.green, "Written " .. #content .. " bytes to " .. filename, "\n")
 end
 
-local function auto_compile() 
-    if config.target == target_linux or config.target == target_linux_object then 
+local function auto_compile()
+    if config.target == target_linux or config.target == target_linux_object then
         os.execute(string.format("fasm %s", config.outputFile))
-    else 
+    else
         os.execute(string.format("fasm.exe %s", config.outputFile))
     end
     os.remove(config.outputFile)
+
     print("Auto Compile finished")
-end 
+end
 
 local startTime = os.clock()
 
 local function main()
     printBanner()
-    
+
     io.write(colors.bright_yellow, "Input:  ", colors.reset, config.inputFile, "\n")
     io.write(colors.bright_yellow, "Output: ", colors.reset, config.outputFile, "\n")
     io.write(colors.bright_yellow, "Entry:  ", colors.reset, config.entryPoint, "\n")
     io.write(colors.bright_yellow, "Auto Compile: ", colors.reset, tostring(config.auto_compile), "\n")
     print("")
-    
+
     local content = parseInputFile(config.inputFile)
     content = preprocessContent(content)
     header = generateHeader()
     local processed = processContent(content)
     writeOutputFile(config.outputFile, processed)
-    
+
     local elapsed = os.clock() - startTime
-    io.write(colors.green, "Assembly successful! ", colors.reset, 
+    io.write(colors.green, "Assembly successful! ", colors.reset,
              "Completed in ", string.format("%.2fms", elapsed * 1000), "\n")
 
-    if config.auto_compile then 
+    if config.auto_compile then
         auto_compile()
     end
 end
