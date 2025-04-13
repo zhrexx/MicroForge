@@ -45,15 +45,42 @@ local config = {
     auto_compile = true,
 }
 
+local function errorExit(msg, line_number, file_name, line_content)
+    io.stderr:write(colors.red, "ERROR: ", msg, colors.reset, "\n")
+    
+    if line_number and file_name then
+        io.stderr:write(colors.yellow, "File: ", file_name, " Line: ", line_number, colors.reset, "\n")
+    end
+    
+    if line_content then
+        io.stderr:write(colors.yellow, "Content: ", line_content, colors.reset, "\n")
+    end
+    
+    io.stderr:write(colors.red, "Compilation aborted.", colors.reset, "\n")
+    os.exit(1)
+end
+
+local current_line_number = 0
+local current_file_name = ""
+
 local i = 1
 while arg and i <= #arg do
     if arg[i] == "-i" or arg[i] == "--input" then
+        if not arg[i+1] then
+            errorExit("Missing input file parameter after " .. arg[i])
+        end
         config.inputFile = arg[i+1]
         i = i + 2
     elseif arg[i] == "-o" or arg[i] == "--output" then
+        if not arg[i+1] then
+            errorExit("Missing output file parameter after " .. arg[i])
+        end
         config.outputFile = arg[i+1]
         i = i + 2
     elseif arg[i] == "-e" or arg[i] == "--entry" then
+        if not arg[i+1] then
+            errorExit("Missing entry point parameter after " .. arg[i])
+        end
         config.entryPoint = arg[i+1]
         i = i + 2
     elseif arg[i] == "-v" or arg[i] == "--verbose" then
@@ -63,10 +90,17 @@ while arg and i <= #arg do
         config.optimize = true
         i = i + 1
     elseif arg[i] == "--target" then
+        if not arg[i+1] then
+            errorExit("Missing target parameter after " .. arg[i])
+        end
+        local valid_targets = {[target_win]=true, [target_linux]=true, [target_linux_object]=true}
+        if not valid_targets[arg[i+1]] then
+            errorExit("Invalid target: " .. arg[i+1] .. ". Valid targets are: win, linux, linux_object")
+        end
         config.target = arg[i+1]
         i = i + 2
     elseif arg[i] == "--no-auto-compile" then
-        config.auto_compile = false;
+        config.auto_compile = false
         i = i + 1
     elseif arg[i] == "-h" or arg[i] == "--help" then
         printBanner()
@@ -77,9 +111,9 @@ while arg and i <= #arg do
         print("  -e, --entry LABEL    Entry point label (default: __entry)")
         print("  -v, --verbose        Enable verbose output")
         print("  --optimize           Enable basic optimizations")
-        print("  --target TARGET_OS   Set a target os");
+        print("  --target TARGET_OS   Set a target os (win, linux, linux_object)")
         print("  -h, --help           Show this help message")
-        print("  --no-auto-compile    allows to disable auto compilation")
+        print("  --no-auto-compile    Disable auto compilation")
         os.exit(0)
     else
         if i == 1 then config.inputFile = arg[i] end
@@ -126,17 +160,13 @@ local function log(msg, color)
     end
 end
 
-local function errorExit(msg)
-    io.stderr:write(colors.red, "ERROR: ", msg, colors.reset, "\n")
-    os.exit(1)
-end
-
 local function parseInputFile(filename)
     local file, err = io.open(filename, "r")
     if not file then
         errorExit("Could not open input file: " .. (err or filename))
     end
 
+    current_file_name = filename
     log("Reading input file: " .. filename)
     local content = file:read("*all")
     file:close()
@@ -159,10 +189,11 @@ local function resolveIncludePath(filename)
             local content = file:read("*all")
             file:close()
             log("Included file: " .. fullPath, colors.yellow)
-            return content
+            return content, fullPath
         end
     end
-    errorExit("Could not find include file: " .. filename)
+    errorExit("Could not find include file: " .. filename, current_line_number, current_file_name)
+    return nil
 end
 
 local function expandDefines(line)
@@ -202,17 +233,20 @@ local function handlePreprocessorDirective(line)
             preprocessor.defines[name] = value or ""
             log("Defined " .. name .. " = '" .. (value or "") .. "'", colors.yellow)
         else
-            errorExit("Invalid !define syntax: " .. line)
+            errorExit("Invalid !define syntax", current_line_number, current_file_name, line)
         end
         return ""
 
     elseif directive == "undef" then
         local name = operands:match("^([%w_]+)%s*$")
         if name then
+            if preprocessor.defines[name] == nil then
+                log("Warning: Attempting to undef '" .. name .. "' which is not defined", colors.yellow)
+            end
             preprocessor.defines[name] = nil
             log("Undefined " .. name, colors.yellow)
         else
-            errorExit("Invalid !undef syntax: " .. line)
+            errorExit("Invalid !undef syntax", current_line_number, current_file_name, line)
         end
         return ""
 
@@ -227,7 +261,7 @@ local function handlePreprocessorDirective(line)
 
             log("Conditional " .. directive .. " " .. name .. ": " .. tostring(isDefined), colors.yellow)
         else
-            errorExit("Invalid " .. directive .. " syntax: " .. line)
+            errorExit("Invalid " .. directive .. " syntax", current_line_number, current_file_name, line)
         end
         return ""
 
@@ -239,7 +273,7 @@ local function handlePreprocessorDirective(line)
 
             log("Conditional else: " .. tostring(preprocessor.currentCondition), colors.yellow)
         else
-            errorExit("!else without matching !ifdef/!ifndef")
+            errorExit("!else without matching !ifdef/!ifndef", current_line_number, current_file_name, line)
         end
         return ""
 
@@ -252,7 +286,7 @@ local function handlePreprocessorDirective(line)
 
             log("Conditional endif", colors.yellow)
         else
-            errorExit("!endif without matching !ifdef/!ifndef")
+            errorExit("!endif without matching !ifdef/!ifndef", current_line_number, current_file_name, line)
         end
         return ""
 
@@ -261,9 +295,14 @@ local function handlePreprocessorDirective(line)
                         operands:match("^<([^>]+)>$")
 
         if filename then
-            return resolveIncludePath(filename)
+            local content, includedFile = resolveIncludePath(filename)
+            local prevFile = current_file_name
+            current_file_name = includedFile
+            local result = content
+            current_file_name = prevFile
+            return result
         else
-            errorExit("Invalid !include syntax: " .. line)
+            errorExit("Invalid !include syntax", current_line_number, current_file_name, line)
         end
 
     elseif directive == "includepath" then
@@ -272,7 +311,7 @@ local function handlePreprocessorDirective(line)
             table.insert(preprocessor.includePaths, path)
             log("Added include path: " .. path, colors.yellow)
         else
-            errorExit("Invalid !includepath syntax: " .. line)
+            errorExit("Invalid !includepath syntax", current_line_number, current_file_name, line)
         end
         return ""
 
@@ -282,11 +321,11 @@ local function handlePreprocessorDirective(line)
             config.entryPoint = entryLabel
             log("Entry point set to: " .. entryLabel, colors.yellow)
         else
-            errorExit("Invalid !entry syntax: " .. line)
+            errorExit("Invalid !entry syntax", current_line_number, current_file_name, line)
         end
         return ""
     else
-        errorExit("Unknown preprocessor directive: !" .. directive)
+        errorExit("Unknown preprocessor directive: !" .. directive, current_line_number, current_file_name, line)
     end
 end
 
@@ -305,7 +344,8 @@ local function preprocessContent(content)
 
     log("Preprocessing " .. #lines .. " lines")
 
-    for _, line in ipairs(lines) do
+    for i, line in ipairs(lines) do
+        current_line_number = i
         local trimmed = line:match("^%s*(.-)%s*$")
 
         if trimmed:match("^!") then
@@ -324,7 +364,7 @@ local function preprocessContent(content)
     end
 
     if #preprocessor.conditionalStack > 0 then
-        errorExit("Unclosed conditional directive (!ifdef/!ifndef without matching !endif)")
+        errorExit("Unclosed conditional directive (!ifdef/!ifndef without matching !endif)", current_line_number, current_file_name)
     end
 
     return table.concat(result, "\n")
@@ -350,7 +390,10 @@ end
 
 local function extractDataLabels(content)
     local data_labels = {}
+    current_line_number = 0
+    
     for line in content:gmatch("[^\r\n]+") do
+        current_line_number = current_line_number + 1
         local trimmed = line:match("^%s*(.-)%s*$")
         trimmed = trimmed:gsub(";.*", "")
         trimmed = trimmed:match("^%s*(.-)%s*$")
@@ -386,11 +429,11 @@ local function substituteBuiltins(line, data_labels)
         if str then
             return tostring(#str)
         else
-            errorExit("strlen: undefined data label '" .. label .. "'")
+            errorExit("strlen: undefined data label '" .. label .. "'", current_line_number, current_file_name, line)
         end
     end)
 
-    line = line:gsub("__FILE__", config.inputFile)
+    line = line:gsub("__FILE__", current_file_name or config.inputFile)
     line = line:gsub("__DATE__", os.date("%Y-%m-%d"))
     line = line:gsub("__TIME__", os.date("%H:%M:%S"))
     line = line:gsub("__PLATFORM__", config.target)
@@ -404,6 +447,7 @@ local function processContent(content)
     local code_section = {}
     local has_entry = false
     local entry_count = 0
+    current_line_number = 0
 
     for line in content:gmatch("[^\r\n]+") do
         table.insert(lines, line)
@@ -413,7 +457,8 @@ local function processContent(content)
 
     local data_labels = extractDataLabels(content)
 
-    for _, line in ipairs(lines) do
+    for i, line in ipairs(lines) do
+        current_line_number = i
         local trimmed = line:match("^%s*(.-)%s*$")
         trimmed = trimmed:gsub(";.*", "")
         trimmed = trimmed:match("^%s*(.-)%s*$")
@@ -463,7 +508,7 @@ local function processContent(content)
     end
 
     if not has_entry then
-        errorExit("No '" .. config.entryPoint .. ":' label found in the input file.")
+        errorExit("No '" .. config.entryPoint .. ":' label found in the input file.", nil, current_file_name)
     elseif entry_count > 1 then
         log("WARNING: Multiple entry points found, using the first one", colors.yellow)
     end
@@ -494,7 +539,6 @@ local function processContent(content)
         if #bss_section > 0 then
             output = output .. table.concat(bss_section, "\n") .. "\n"
         end
-
     end
 
     log("Generated " .. #code_section .. " code lines and " .. #data_section .. " data lines")
@@ -515,14 +559,31 @@ local function writeOutputFile(filename, content)
 end
 
 local function auto_compile()
+    log("Starting auto-compilation...", colors.yellow)
+    
+    local command
+    local result
+    
     if config.target == target_linux or config.target == target_linux_object then
-        os.execute(string.format("fasm %s", config.outputFile))
+        command = string.format("fasm %s", config.outputFile)
+        log("Running: " .. command, colors.blue)
+        result = os.execute(command)
     else
-        os.execute(string.format("fasm.exe %s", config.outputFile))
+        command = string.format("fasm.exe %s", config.outputFile)
+        log("Running: " .. command, colors.blue)
+        result = os.execute(command)
     end
-    os.remove(config.outputFile)
+    
+    if not result then
+        errorExit("Auto-compilation failed with command: " .. command)
+    end
+    
+    local remove_result = os.remove(config.outputFile)
+    if not remove_result then
+        log("Warning: Failed to remove temporary file: " .. config.outputFile, colors.yellow)
+    end
 
-    print("Auto Compile finished")
+    io.write(colors.green, "Auto Compile finished successfully", colors.reset, "\n")
 end
 
 local startTime = os.clock()
@@ -533,9 +594,11 @@ local function main()
     io.write(colors.bright_yellow, "Input:  ", colors.reset, config.inputFile, "\n")
     io.write(colors.bright_yellow, "Output: ", colors.reset, config.outputFile, "\n")
     io.write(colors.bright_yellow, "Entry:  ", colors.reset, config.entryPoint, "\n")
+    io.write(colors.bright_yellow, "Target: ", colors.reset, config.target, "\n")
     io.write(colors.bright_yellow, "Auto Compile: ", colors.reset, tostring(config.auto_compile), "\n")
     print("")
 
+    current_file_name = config.inputFile
     local content = parseInputFile(config.inputFile)
     content = preprocessContent(content)
     header = generateHeader()
@@ -553,5 +616,5 @@ end
 
 local status, err = pcall(main)
 if not status then
-    errorExit(err)
+    errorExit("Runtime error: " .. tostring(err))
 end
