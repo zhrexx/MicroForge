@@ -46,14 +46,13 @@ local config = {
 }
 
 local function errorExit(msg, line_number, file_name, line_content)
-    io.stderr:write(colors.red, "ERROR: ", msg, colors.reset, "\n")
-    
     if line_number and file_name then
-        io.stderr:write(colors.yellow, "File: ", file_name, " Line: ", line_number, colors.reset, "\n")
+        io.stderr:write(colors.red, file_name, ":", line_number)
     end
+    io.stderr:write(": ", msg, colors.reset, "\n")
     
     if line_content then
-        io.stderr:write(colors.yellow, "Content: ", line_content, colors.reset, "\n")
+        io.stderr:write(colors.yellow, "[", line_number, "] ", line_content, colors.reset, "\n")
     end
     
     io.stderr:write(colors.red, "Compilation aborted.", colors.reset, "\n")
@@ -508,7 +507,7 @@ local function processContent(content)
     end
 
     if not has_entry then
-        errorExit("No '" .. config.entryPoint .. ":' label found in the input file.", nil, current_file_name)
+        errorExit("No '" .. config.entryPoint .. "' label found in the input file.", nil, current_file_name)
     elseif entry_count > 1 then
         log("WARNING: Multiple entry points found, using the first one", colors.yellow)
     end
@@ -565,11 +564,11 @@ local function auto_compile()
     local result
     
     if config.target == target_linux or config.target == target_linux_object then
-        command = string.format("fasm %s", config.outputFile)
+        command = string.format("fasm -m 524288 %s", config.outputFile)
         log("Running: " .. command, colors.blue)
         result = os.execute(command)
     else
-        command = string.format("fasm.exe %s", config.outputFile)
+        command = string.format("fasm.exe -m 524288 %s", config.outputFile)
         log("Running: " .. command, colors.blue)
         result = os.execute(command)
     end
