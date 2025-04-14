@@ -28,11 +28,15 @@ void sb_destroy(StringBuilder *sb) {
     sb->capacity = 0;
 }
 
+void sb_resize(StringBuilder *sb, size_t new_capacity) {
+    sb->capacity = new_capacity;
+    sb->data = (char *)realloc(sb->data, new_capacity);
+    assert(sb->data != NULL);
+}
+
 char sb_append(StringBuilder *sb, char ch) {
     if ((sb->size + 1) > sb->capacity) {
-        sb->capacity = sb->capacity ? sb->capacity * 2 : 1;
-        sb->data = (char *)realloc(sb->data, sb->capacity);
-        assert(sb->data != NULL);
+        sb_resize(sb, sb->capacity ? sb->capacity * 2 : 1);
     }
     sb->data[sb->size++] = ch;
     return ch;
