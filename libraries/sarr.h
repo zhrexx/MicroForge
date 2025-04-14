@@ -41,6 +41,7 @@ void sarr_resize(StringArray *sarr, size_t new_capacity) {
 }
 
 void sarr_append(StringArray *sarr, char *string) {
+    if (!string) return;
     if ((sarr->size + 1) > sarr->capacity) {
         sarr_resize(sarr, sarr->capacity ? sarr->capacity * 2 : 1);
     }
@@ -48,6 +49,11 @@ void sarr_append(StringArray *sarr, char *string) {
 }
 
 char *sarr_get(StringArray *sarr, size_t index) {
+    assert(index < sarr->size);
+    return sarr->strings[index];
+}
+
+char *sarr_get_copy(StringArray *sarr, size_t index) {
     assert(index < sarr->size);
     return strdup(sarr->strings[index]);
 }
@@ -70,34 +76,37 @@ void sarr_remove(StringArray *sarr, size_t index) {
 
 char *sarr_combine(StringArray *sarr) {
     size_t result_size = 0;
-    char **copies = malloc(sarr->size * sizeof(char *));
-    assert(copies != NULL);
-
     for (size_t i = 0; i < sarr->size; i++) {
-        copies[i] = sarr_get(sarr, i);
-        result_size += strlen(copies[i]);
+        result_size += strlen(sarr->strings[i]);
     }
 
-    if (result_size == 0) {
-        for (size_t i = 0; i < sarr->size; i++) free(copies[i]);
-        free(copies);
-        return strdup("");
-    }
+    if (result_size == 0) return strdup("");
 
     char *result = malloc(result_size + 1);
     assert(result != NULL);
 
     size_t cursor = 0;
     for (size_t i = 0; i < sarr->size; i++) {
-        size_t len = strlen(copies[i]);
-        memcpy(result + cursor, copies[i], len);
+        size_t len = strlen(sarr->strings[i]);
+        memcpy(result + cursor, sarr->strings[i], len);
         cursor += len;
-        free(copies[i]);
     }
 
     result[cursor] = '\0';
-    free(copies);
     return result;
+}
+
+StringArray str_to_sarr(char *original_str, char *delim) {
+    StringArray sarr = sarr_create(10);
+    char *str = strdup(original_str);
+    assert(str != NULL);
+    char *token = strtok(str, delim);
+    while (token != NULL) {
+        sarr_append(&sarr, token);
+        token = strtok(NULL, delim);
+    }
+    free(str);
+    return sarr;
 }
 
 
