@@ -1,3 +1,5 @@
+// standalone means its header-only library version
+
 // Why XVec looks like my vector.h 
 // the code base is shared but this appoch is more user-friendly and modern (Using Word instead of void *)
 // i hope you will like it
