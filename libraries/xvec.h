@@ -104,7 +104,7 @@ void xvec_free(XVec *vector) {
 ///////////////////////////////////////
 
 XVec xvec_create(size_t initial_capacity) {
-    XVec result = malloc(sizeof(XVec));
+    XVec result = {0};
     xvec_init(&result, initial_capacity);
     return result;
 }
