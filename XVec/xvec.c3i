@@ -1,0 +1,43 @@
+module xvec;
+
+import std::io;
+import std::core::mem;
+import std::os;
+
+enum WordType {
+    WINT,
+    WFLOAT,
+    WPOINTER,
+    WCHAR_,
+}
+
+struct Word {
+    WordType type;
+    union {
+        void* as_pointer;
+        int as_int;
+        float as_float;
+        char as_char;
+    }
+}
+
+struct XVec {
+    Word* data;
+    usz size;
+    usz cap;
+}
+
+fn Word word_int(int value);
+fn void XVec.init(XVec* self, usz cap);
+fn void XVec.free(XVec* self);
+fn void XVec.resize(XVec* self, usz new_cap);
+fn void XVec.push(XVec* self, Word value);
+fn Word XVec.pop(XVec* self);
+fn Word* XVec.get(XVec* self, usz index);
+fn void XVec.set(XVec* self, usz index, Word value);
+fn void XVec.remove(XVec* self, usz index);
+fn usz XVec.find(XVec* self, Word value);
+fn bool XVec.contains(XVec* self, Word value);
+fn void XVec.compress(XVec* self);
+fn void memcpy(void* dest, void* src, usz n);
+fn void XVec.copy(XVec* src, XVec* dest);

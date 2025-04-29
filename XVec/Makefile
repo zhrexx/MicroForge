@@ -23,3 +23,9 @@ shared: $(SRC) $(HEADER)
 
 clean:
 	rm -f $(OBJ) $(LIB) libxvec.so
+
+xvec_c3.a: xvec.c3 
+	c3c static-lib xvec.c3 -o xvec_c3
+
+xvec_c3.so: xvec.c3
+	c3c dynamic-lib xvec.c3 -o xvec_c3
