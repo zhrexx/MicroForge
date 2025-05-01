@@ -1,9 +1,12 @@
+#ifndef XPROJECT_H
+#define XPROJECT_H
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <stdint.h>
 
 #ifdef _WIN32
 #include <direct.h>
@@ -641,7 +644,7 @@ void wait_for_compilation() {
     }
 }
 
-int find_library(const char* name, char* result, size_t result_size) {
+int find_library(const char* name, char* result, size_t result_size, BuildTarget *target) {
     memset(result, 0, result_size);
     
 #ifdef _WIN32
@@ -679,6 +682,20 @@ int find_library(const char* name, char* result, size_t result_size) {
             }
         }
     }
+    if (target) {
+        for (int i = 0; i < target->lib_path_count; i++) {
+            for (int j = 0; ext[j] != NULL; j++) {
+                char lib_name[MAX_PATH];
+                snprintf(lib_name, sizeof(lib_name), "%s%s", name, ext[j]);
+                char search_path[MAX_PATH];
+                snprintf(search_path, sizeof(search_path), "%s\\%s", target->library_paths[i], lib_name);
+                if (file_exists(search_path)) {
+                    strncpy(result, search_path, result_size - 1);
+                    return 1;
+                }
+            }
+        }
+    }
 #else
     const char* ext[] = { ".so", ".a", NULL };
     const char* paths[] = {
@@ -698,9 +715,10 @@ int find_library(const char* name, char* result, size_t result_size) {
     if (pipe) {
         char buffer[MAX_PATH];
         if (fgets(buffer, sizeof(buffer), pipe)) {
-            char* path_start = strrchr(buffer, ' ');
-            if (path_start) {
-                path_start++;
+            char* arrow = strstr(buffer, " => ");
+            if (arrow) {
+                char* path_start = arrow + 4;
+                while (*path_start == ' ') path_start++;
                 path_start[strcspn(path_start, "\r\n")] = 0;
                 strncpy(result, path_start, result_size - 1);
                 pclose(pipe);
@@ -709,7 +727,7 @@ int find_library(const char* name, char* result, size_t result_size) {
         }
         pclose(pipe);
     }
-    
+
     for (int i = 0; ext[i] != NULL; i++) {
         char lib_name[MAX_PATH];
         snprintf(lib_name, sizeof(lib_name), "lib%s%s", name, ext[i]);
@@ -720,6 +738,20 @@ int find_library(const char* name, char* result, size_t result_size) {
             if (file_exists(search_path)) {
                 strncpy(result, search_path, result_size - 1);
                 return 1;
+            }
+        }
+    }
+    if (target) {
+        for (int i = 0; i < target->lib_path_count; i++) {
+            for (int j = 0; ext[j] != NULL; j++) {
+                char lib_name[MAX_PATH];
+                snprintf(lib_name, sizeof(lib_name), "lib%s%s", name, ext[j]);
+                char search_path[MAX_PATH];
+                snprintf(search_path, sizeof(search_path), "%s/%s", target->library_paths[i], lib_name);
+                if (file_exists(search_path)) {
+                    strncpy(result, search_path, result_size - 1);
+                    return 1;
+                }
             }
         }
     }
@@ -938,8 +970,9 @@ char* get_os_name() {
     return os_name;
 }
 
-int get_cpu_info(char* model_name, size_t name_size, int* cores) {
+int get_cpu_info(char* model_name, size_t name_size, int* cores, char* arch, size_t arch_size) {
     memset(model_name, 0, name_size);
+    memset(arch, 0, arch_size);
     *cores = 0;
     
 #ifdef _WIN32
@@ -953,6 +986,26 @@ int get_cpu_info(char* model_name, size_t name_size, int* cores) {
         DWORD size = name_size;
         RegQueryValueEx(hKey, "ProcessorNameString", NULL, &type, (LPBYTE)model_name, &size);
         RegCloseKey(hKey);
+    }
+    
+    SYSTEM_INFO systemInfo;
+    GetNativeSystemInfo(&systemInfo);
+    
+    switch (systemInfo.wProcessorArchitecture) {
+        case PROCESSOR_ARCHITECTURE_AMD64:
+            strncpy(arch, "x86_64", arch_size - 1);
+            break;
+        case PROCESSOR_ARCHITECTURE_ARM:
+            strncpy(arch, "arm", arch_size - 1);
+            break;
+        case PROCESSOR_ARCHITECTURE_ARM64:
+            strncpy(arch, "arm64", arch_size - 1);
+            break;
+        case PROCESSOR_ARCHITECTURE_INTEL:
+            strncpy(arch, "x86", arch_size - 1);
+            break;
+        default:
+            strncpy(arch, "unknown", arch_size - 1);
     }
 #else
     FILE* pipe = popen("cat /proc/cpuinfo | grep 'model name' | head -1", "r");
@@ -978,15 +1031,26 @@ int get_cpu_info(char* model_name, size_t name_size, int* cores) {
         }
         pclose(pipe);
     }
+    
+    pipe = popen("uname -m", "r");
+    if (pipe) {
+        char buffer[64];
+        if (fgets(buffer, sizeof(buffer), pipe)) {
+            buffer[strcspn(buffer, "\r\n")] = 0;
+            strncpy(arch, buffer, arch_size - 1);
+        }
+        pclose(pipe);
+    }
 #endif
     
-    return strlen(model_name) > 0 && *cores > 0;
+    return strlen(model_name) > 0 && *cores > 0 && strlen(arch) > 0;
 }
 
 uint64_t get_available_memory() {
     uint64_t available_memory = 0;
     
 #ifdef _WIN32
+    if (*p == '\r' && *(p+1) == '\n') line_count++;
     MEMORYSTATUSEX status;
     status.dwLength = sizeof(status);
     if (GlobalMemoryStatusEx(&status)) {
@@ -1431,10 +1495,21 @@ static int lua_wait_for_compilation(lua_State* L) {
 }
 
 static int lua_find_library(lua_State* L) {
-    const char* name = luaL_checkstring(L, 1);
-    char result[MAX_PATH] = {0};
+    BuildTarget* target = NULL;
+    const char* name;
+    int nargs = lua_gettop(L);
     
-    if (find_library(name, result, sizeof(result))) {
+    if (nargs == 2) {
+        target = lua_touserdata(L, 1);
+        name = luaL_checkstring(L, 2);
+    } else if (nargs == 1) {
+        name = luaL_checkstring(L, 1);
+    } else {
+        return luaL_error(L, "expected 1 or 2 arguments");
+    }
+    
+    char result[MAX_PATH] = {0};
+    if (find_library(name, result, sizeof(result), target)) {
         lua_pushstring(L, result);
         return 1;
     }
@@ -1510,8 +1585,8 @@ static int lua_get_os_name(lua_State* L) {
 static int lua_get_cpu_info(lua_State* L) {
     char model_name[256] = {0};
     int cores = 0;
-    
-    if (get_cpu_info(model_name, sizeof(model_name), &cores)) {
+    char arch[256] = {0}; 
+    if (get_cpu_info(model_name, sizeof(model_name), &cores, arch, sizeof(arch))) {
         lua_newtable(L);
         
         lua_pushstring(L, model_name);
@@ -1520,6 +1595,8 @@ static int lua_get_cpu_info(lua_State* L) {
         lua_pushinteger(L, cores);
         lua_setfield(L, -2, "cores");
         
+        lua_pushstring(L, arch);
+        lua_setfield(L, -2, "arch");
         return 1;
     }
     
@@ -1718,6 +1795,15 @@ static int lua_check_function(lua_State* L) {
     return 1;
 }
 
+static int lua_remove_file(lua_State *L) {
+    const char *file = luaL_checkstring(L, 1);
+    #ifdef WIN32 
+    _unlink(file);
+    #else 
+    unlink(file);
+    #endif
+}
+
 void setup_lua_functions(lua_State* L) {
     lua_newtable(L);
 
@@ -1765,6 +1851,7 @@ void setup_lua_functions(lua_State* L) {
     push_function(L, lua_generate_temp_filename, "generate_temp_filename");
     push_function(L, lua_find_include, "find_include");
     push_function(L, lua_check_function, "check_function");
+    push_function(L, lua_remove_file, "remove_file");
     lua_setglobal(L, "x");
 
     lua_pushinteger(L, TARGET_EXECUTABLE);
@@ -1774,31 +1861,4 @@ void setup_lua_functions(lua_State* L) {
     lua_pushinteger(L, TARGET_SHARED_LIB);
     lua_setglobal(L, "TARGET_SHARED_LIB");
 }
-
-int main(int argc, char* argv[]) {
-    #ifdef _WIN32
-    strcpy(build_system.compiler, "cl");
-    strcpy(build_system.cflags, "");
-    strcpy(build_system.ldflags, "");
-    #else
-    strcpy(build_system.compiler, "gcc");
-    strcpy(build_system.cflags, "");
-    strcpy(build_system.ldflags, "");
-    #endif
-
-    strcpy(build_system.output_dir, "build");
-
-    init_parallel_system();
-
-    lua_State* L = luaL_newstate();
-    luaL_openlibs(L);
-    setup_lua_functions(L);
-
-    if (luaL_dofile(L, "XProject.lua") != LUA_OK) {
-        log_error("Error executing Lua script: %s", lua_tostring(L, -1));
-    }
-
-    lua_close(L);
-    cleanup_parallel_system();
-    return 0;
-}
+#endif
