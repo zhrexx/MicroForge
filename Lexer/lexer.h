@@ -475,12 +475,6 @@ void lexer_print_token(Token token) {
            token.lexeme, token.type, token.line, token.column);
 }
 
-void lexer_print_tokens(Lexer *lexer) {
-    for (size_t i = 0; i < lexer->tokens_size; i++) {
-        lexer_print_token(lexer->tokens[i]);
-    }
-}
-
 const char *token_type_to_string(TokenType type) {
     switch (type) {
         case TOKEN_ID: return "IDENTIFIER";
@@ -494,12 +488,28 @@ const char *token_type_to_string(TokenType type) {
     }
 }
 
-void lexer_print_tokens_detailed(Lexer *lexer) {
+void lexer_print_tokens(Lexer *lexer) {
     for (size_t i = 0; i < lexer->tokens_size; i++) {
         Token token = lexer->tokens[i];
         printf("Token: %-20s | Type: %-15s | Line: %4zu | Column: %4zu\n", 
                token.lexeme, token_type_to_string(token.type), token.line, token.column);
     }
+}
+
+Token lexer_expect(Lexer *lexer, TokenType expected_type, const char *expected_lexeme, const char *error_message) {
+    Token token = lexer_get_next_token(lexer);
+    
+    if (token.type != expected_type) {
+        token_destroy(&token);
+        return token_create(TOKEN_ERROR, error_message, lexer->state.current_line, lexer->state.current_column);
+    }
+    
+    if (expected_lexeme != NULL && strcmp(token.lexeme, expected_lexeme) != 0) {
+        token_destroy(&token);
+        return token_create(TOKEN_ERROR, error_message, lexer->state.current_line, lexer->state.current_column);
+    }
+    
+    return token;
 }
 
 #endif
