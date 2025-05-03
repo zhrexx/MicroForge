@@ -13,35 +13,10 @@
 
 typedef enum {
     TOKEN_ID,
-    TOKEN_PLUS,
-    TOKEN_MINUS,
-    TOKEN_MULTIPLY,
-    TOKEN_DIVIDE,
-    TOKEN_MODULO,
-    TOKEN_EQUALS,
-    TOKEN_COLON,
-    TOKEN_SEMICOLON,
-    TOKEN_LPAREN,
-    TOKEN_RPAREN,
-    TOKEN_LBRACE,
-    TOKEN_RBRACE,
-    TOKEN_LBRACKET,
-    TOKEN_RBRACKET,
-    TOKEN_LT,
-    TOKEN_GT,
-    TOKEN_LE,
-    TOKEN_GE,
-    TOKEN_EQ,
-    TOKEN_NE,
-    TOKEN_AND,
-    TOKEN_OR,
-    TOKEN_NOT,
-    TOKEN_DOT,
-    TOKEN_COMMA,
+    TOKEN_SYMBOL,
     TOKEN_STRING,
     TOKEN_NUMBER,
     TOKEN_KEYWORD,
-    TOKEN_COMMENT,
     TOKEN_EOF,
     TOKEN_ERROR,
 } TokenType;
@@ -88,13 +63,7 @@ Token token_create(TokenType type, const char *lexeme, size_t line, size_t colum
 }
 
 void token_destroy(Token *token) {
-    if (token->lexeme && token->type != TOKEN_PLUS && token->type != TOKEN_MINUS &&
-        token->type != TOKEN_EQUALS && token->type != TOKEN_COLON && token->type != TOKEN_SEMICOLON &&
-        token->type != TOKEN_LPAREN && token->type != TOKEN_RPAREN && token->type != TOKEN_LBRACE &&
-        token->type != TOKEN_RBRACE && token->type != TOKEN_LBRACKET && token->type != TOKEN_RBRACKET &&
-        token->type != TOKEN_DOT && token->type != TOKEN_COMMA && token->type != TOKEN_MULTIPLY &&
-        token->type != TOKEN_DIVIDE && token->type != TOKEN_MODULO && token->type != TOKEN_LT &&
-        token->type != TOKEN_GT && token->type != TOKEN_NOT) {
+    if (token->lexeme) {
         free(token->lexeme);
     }
 }
@@ -368,52 +337,66 @@ Token lexer_get_identifier_or_keyword_token(Lexer *lexer) {
     return token;
 }
 
-Token lexer_get_comment_token(Lexer *lexer) {
-    size_t start_pos = lexer->state.current_pos;
+Token lexer_get_symbol_token(Lexer *lexer, char current_char) {
     size_t start_line = lexer->state.current_line;
     size_t start_column = lexer->state.current_column;
     
-    lexer_advance(lexer);
+    char symbol[3] = {current_char, '\0', '\0'};
+    int symbol_length = 1;
     
-    if (lexer_peek(lexer) == '/') {
-        lexer_advance(lexer);
-        
-        while (lexer_peek(lexer) != '\n' && lexer_peek(lexer) != '\0') {
-            lexer_advance(lexer);
-        }
-    } else if (lexer_peek(lexer) == '*') {
-        lexer_advance(lexer);
-        
-        while (!(lexer_peek(lexer) == '*' && lexer_peek_next(lexer) == '/') && lexer_peek(lexer) != '\0') {
-            lexer_advance(lexer);
-        }
-        
-        if (lexer_peek(lexer) == '\0') {
-            return token_create(TOKEN_ERROR, "Unterminated block comment", start_line, start_column);
-        }
-        
-        lexer_advance(lexer);
-        lexer_advance(lexer);
-    } else {
-        lexer->state.current_pos = start_pos;
-        lexer->state.current_line = start_line;
-        lexer->state.current_column = start_column;
-        return token_create(TOKEN_DIVIDE, "/", start_line, start_column);
+    switch (current_char) {
+        case '=':
+            if (lexer_match(lexer, '=')) {
+                symbol[1] = '=';
+                symbol_length = 2;
+            }
+            break;
+        case '<':
+            if (lexer_match(lexer, '=')) {
+                symbol[1] = '=';
+                symbol_length = 2;
+            }
+            break;
+        case '>':
+            if (lexer_match(lexer, '=')) {
+                symbol[1] = '=';
+                symbol_length = 2;
+            }
+            break;
+        case '!':
+            if (lexer_match(lexer, '=')) {
+                symbol[1] = '=';
+                symbol_length = 2;
+            }
+            break;
+        case '&':
+            if (lexer_match(lexer, '&')) {
+                symbol[1] = '&';
+                symbol_length = 2;
+            } else {
+                return token_create(TOKEN_ERROR, "Unexpected character '&'", start_line, start_column);
+            }
+            break;
+        case '|':
+            if (lexer_match(lexer, '|')) {
+                symbol[1] = '|';
+                symbol_length = 2;
+            } else {
+                return token_create(TOKEN_ERROR, "Unexpected character '|'", start_line, start_column);
+            }
+            break;
+        case '/':
+            if (lexer_peek(lexer) == '/' || lexer_peek(lexer) == '*') {
+                while (lexer_peek(lexer) != '\n' && lexer_peek(lexer) != '\0') {
+                    lexer_advance(lexer);
+                }
+                return lexer_get_next_token(lexer);
+            }
+            break;
     }
     
-    size_t length = lexer->state.current_pos - start_pos;
-    char *lexeme = (char *)malloc(length + 1);
-    if (!lexeme) {
-        ERROR_HAPPENED("Memory allocation failed for comment lexeme\n", "");
-    }
-    
-    strncpy(lexeme, lexer->state.file_content + start_pos, length);
-    lexeme[length] = '\0';
-    
-    Token token = token_create(TOKEN_COMMENT, lexeme, start_line, start_column);
-    free(lexeme);
-    
-    return token;
+    symbol[symbol_length] = '\0';
+    return token_create(TOKEN_SYMBOL, symbol, start_line, start_column);
 }
 
 Token lexer_get_next_token(Lexer *lexer) {
@@ -440,63 +423,34 @@ Token lexer_get_next_token(Lexer *lexer) {
             return lexer_get_identifier_or_keyword_token(lexer);
         }
         
-        if (current_char == '/') {
-            if (lexer_peek_next(lexer) == '/' || lexer_peek_next(lexer) == '*') {
-                return lexer_get_comment_token(lexer);
+        if (current_char == '/' && (lexer_peek_next(lexer) == '/' || lexer_peek_next(lexer) == '*')) {
+            if (lexer_peek_next(lexer) == '/') {
+                lexer_advance(lexer);
+                lexer_advance(lexer);
+                
+                while (lexer_peek(lexer) != '\n' && lexer_peek(lexer) != '\0') {
+                    lexer_advance(lexer);
+                }
+                continue;
+            } else {
+                lexer_advance(lexer);
+                lexer_advance(lexer);
+                
+                while (!(lexer_peek(lexer) == '*' && lexer_peek_next(lexer) == '/') && lexer_peek(lexer) != '\0') {
+                    lexer_advance(lexer);
+                }
+                
+                if (lexer_peek(lexer) != '\0') {
+                    lexer_advance(lexer);
+                    lexer_advance(lexer);
+                }
+                continue;
             }
         }
         
         lexer_advance(lexer);
         
-        switch (current_char) {
-            case '+': return token_create(TOKEN_PLUS, "+", start_line, start_column);
-            case '-': return token_create(TOKEN_MINUS, "-", start_line, start_column);
-            case '*': return token_create(TOKEN_MULTIPLY, "*", start_line, start_column);
-            case '/': return token_create(TOKEN_DIVIDE, "/", start_line, start_column);
-            case '%': return token_create(TOKEN_MODULO, "%", start_line, start_column);
-            case '=':
-                if (lexer_match(lexer, '=')) {
-                    return token_create(TOKEN_EQ, "==", start_line, start_column);
-                }
-                return token_create(TOKEN_EQUALS, "=", start_line, start_column);
-            case ':': return token_create(TOKEN_COLON, ":", start_line, start_column);
-            case ';': return token_create(TOKEN_SEMICOLON, ";", start_line, start_column);
-            case '(': return token_create(TOKEN_LPAREN, "(", start_line, start_column);
-            case ')': return token_create(TOKEN_RPAREN, ")", start_line, start_column);
-            case '{': return token_create(TOKEN_LBRACE, "{", start_line, start_column);
-            case '}': return token_create(TOKEN_RBRACE, "}", start_line, start_column);
-            case '[': return token_create(TOKEN_LBRACKET, "[", start_line, start_column);
-            case ']': return token_create(TOKEN_RBRACKET, "]", start_line, start_column);
-            case '<':
-                if (lexer_match(lexer, '=')) {
-                    return token_create(TOKEN_LE, "<=", start_line, start_column);
-                }
-                return token_create(TOKEN_LT, "<", start_line, start_column);
-            case '>':
-                if (lexer_match(lexer, '=')) {
-                    return token_create(TOKEN_GE, ">=", start_line, start_column);
-                }
-                return token_create(TOKEN_GT, ">", start_line, start_column);
-            case '!':
-                if (lexer_match(lexer, '=')) {
-                    return token_create(TOKEN_NE, "!=", start_line, start_column);
-                }
-                return token_create(TOKEN_NOT, "!", start_line, start_column);
-            case '&':
-                if (lexer_match(lexer, '&')) {
-                    return token_create(TOKEN_AND, "&&", start_line, start_column);
-                }
-                return token_create(TOKEN_ERROR, "Unexpected character '&'", start_line, start_column);
-            case '|':
-                if (lexer_match(lexer, '|')) {
-                    return token_create(TOKEN_OR, "||", start_line, start_column);
-                }
-                return token_create(TOKEN_ERROR, "Unexpected character '|'", start_line, start_column);
-            case '.': return token_create(TOKEN_DOT, ".", start_line, start_column);
-            case ',': return token_create(TOKEN_COMMA, ",", start_line, start_column);
-            default:
-                return token_create(TOKEN_ERROR, "Unexpected character", start_line, start_column);
-        }
+        return lexer_get_symbol_token(lexer, current_char);
     }
     
     return token_create(TOKEN_EOF, "EOF", lexer->state.current_line, lexer->state.current_column);
@@ -506,7 +460,11 @@ void lexer_tokenize_all(Lexer *lexer) {
     Token token;
     do {
         token = lexer_get_next_token(lexer);
-        lexer_add_token(lexer, token);
+        if (token.type != TOKEN_ERROR) {
+            lexer_add_token(lexer, token);
+        } else {
+            token_destroy(&token);
+        }
     } while (token.type != TOKEN_EOF && token.type != TOKEN_ERROR);
 }
 
@@ -524,35 +482,10 @@ void lexer_print_tokens(Lexer *lexer) {
 const char *token_type_to_string(TokenType type) {
     switch (type) {
         case TOKEN_ID: return "IDENTIFIER";
-        case TOKEN_PLUS: return "PLUS";
-        case TOKEN_MINUS: return "MINUS";
-        case TOKEN_MULTIPLY: return "MULTIPLY";
-        case TOKEN_DIVIDE: return "DIVIDE";
-        case TOKEN_MODULO: return "MODULO";
-        case TOKEN_EQUALS: return "EQUALS";
-        case TOKEN_COLON: return "COLON";
-        case TOKEN_SEMICOLON: return "SEMICOLON";
-        case TOKEN_LPAREN: return "LPAREN";
-        case TOKEN_RPAREN: return "RPAREN";
-        case TOKEN_LBRACE: return "LBRACE";
-        case TOKEN_RBRACE: return "RBRACE";
-        case TOKEN_LBRACKET: return "LBRACKET";
-        case TOKEN_RBRACKET: return "RBRACKET";
-        case TOKEN_LT: return "LESS_THAN";
-        case TOKEN_GT: return "GREATER_THAN";
-        case TOKEN_LE: return "LESS_EQUAL";
-        case TOKEN_GE: return "GREATER_EQUAL";
-        case TOKEN_EQ: return "EQUAL_EQUAL";
-        case TOKEN_NE: return "NOT_EQUAL";
-        case TOKEN_AND: return "AND";
-        case TOKEN_OR: return "OR";
-        case TOKEN_NOT: return "NOT";
-        case TOKEN_DOT: return "DOT";
-        case TOKEN_COMMA: return "COMMA";
+        case TOKEN_SYMBOL: return "SYMBOL";
         case TOKEN_STRING: return "STRING";
         case TOKEN_NUMBER: return "NUMBER";
         case TOKEN_KEYWORD: return "KEYWORD";
-        case TOKEN_COMMENT: return "COMMENT";
         case TOKEN_EOF: return "EOF";
         case TOKEN_ERROR: return "ERROR";
         default: return "UNKNOWN";
