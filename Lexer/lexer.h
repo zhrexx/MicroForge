@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
+#include <stdarg.h>
 
 #define ERROR_HAPPENED(msg, ...) \
     printf(msg, __VA_ARGS__);    \
@@ -48,6 +49,21 @@ typedef struct {
 
 #define INIT_TOKEN_CAPACITY 100
 #define MAX_KEYWORD_COUNT 50
+
+void lexer_error(Lexer *lexer, const char *format, ...) {
+    fprintf(stderr, "%s:%zu:%zu: ", 
+            lexer->state.file_name ? lexer->state.file_name : "input", 
+            lexer->state.current_line, 
+            lexer->state.current_column);
+    
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+    
+    fprintf(stderr, "\n");
+    exit(1);
+}
 
 Token token_create(TokenType type, const char *lexeme, size_t line, size_t column) {
     Token token;
@@ -501,12 +517,12 @@ Token lexer_expect(Lexer *lexer, TokenType expected_type, const char *expected_l
     
     if (token.type != expected_type) {
         token_destroy(&token);
-        return token_create(TOKEN_ERROR, error_message, lexer->state.current_line, lexer->state.current_column);
+        lexer_error(lexer, error_message);
     }
     
     if (expected_lexeme != NULL && strcmp(token.lexeme, expected_lexeme) != 0) {
         token_destroy(&token);
-        return token_create(TOKEN_ERROR, error_message, lexer->state.current_line, lexer->state.current_column);
+        lexer_error(lexer, error_message);
     }
     
     return token;
