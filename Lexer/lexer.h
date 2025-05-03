@@ -337,6 +337,8 @@ Token lexer_get_identifier_or_keyword_token(Lexer *lexer) {
     return token;
 }
 
+Token lexer_get_next_token(Lexer *lexer);
+
 Token lexer_get_symbol_token(Lexer *lexer, char current_char) {
     size_t start_line = lexer->state.current_line;
     size_t start_column = lexer->state.current_column;
