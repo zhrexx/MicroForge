@@ -23,3 +23,6 @@ shared: $(SRC) $(HEADER)
 
 clean:
 	rm -f $(OBJ) $(LIB) libxterm.so
+
+example: example.c
+	gcc example.c -o example -L. -lxterm -ltermcap
