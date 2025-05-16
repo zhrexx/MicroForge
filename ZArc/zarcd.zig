@@ -35,7 +35,7 @@ pub fn parseArgs(args: [][]u8) PArgs {
 }
 
 pub fn main() !u8 {
-    const args = std.process.argsAlloc(gpa) catch @panic("could not get args");
+    const args = std.process.argsAlloc(gpa) catch zarc.panic("could not get args", .{});
     defer std.process.argsFree(gpa, args);
     
     if (args.len < 2) {

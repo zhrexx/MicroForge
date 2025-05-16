@@ -23,7 +23,7 @@ pub fn parseArgs(args: [][]u8) PArgs {
             if (std.mem.eql(u8, arg, "-o")) {
                 isOutput = true;
             } else {
-                files.append(arg) catch @panic("could not append new input file"); 
+                files.append(arg) catch zarc.panic("could not append new input file", .{}); 
             }
         } else {
             output = arg;
@@ -49,7 +49,7 @@ pub fn extractFileName(path: []u8) []u8 {
 }
 
 pub fn main() !u8 {
-    const args = std.process.argsAlloc(gpa) catch @panic("could not get args");
+    const args = std.process.argsAlloc(gpa) catch zarc.panic("could not get args", .{});
     defer std.process.argsFree(gpa, args);
     
     var file_entries = std.ArrayList(zarc.ZArcFileEntry).init(gpa);
@@ -63,11 +63,11 @@ pub fn main() !u8 {
 
     for (pargs.files.items) |file_path| {
         const file: std.fs.File = cwd.openFile(file_path, .{}) catch |err| {
-            std.debug.panic("[ZArc] could not open file '{s}': {any}\n", .{file_path, err});
+            zarc.panic("[ZArc] could not open file '{s}': {any}\n", .{file_path, err});
         };
         defer file.close();
 
-        const file_content = file.readToEndAlloc(gpa, 1024 * 1024) catch @panic("could not read file");
+        const file_content = file.readToEndAlloc(gpa, 1024 * 1024) catch zarc.panic("could not read file", .{});
         defer gpa.free(file_content);
 
         var cmp = try zlib.compressor(buf.writer(), .{});
@@ -82,12 +82,12 @@ pub fn main() !u8 {
             .file_size = @intCast(compressed.len)
         };
 
-        file_entries.append(file_entry) catch @panic("could not append file entry");
+        file_entries.append(file_entry) catch zarc.panic("could not append file entry", .{});
         buf.clearAndFree();
     }
    
     const outputFile: std.fs.File = cwd.createFile(pargs.output, .{}) catch |err| {
-        std.debug.panic("[ZArc] could not open file '{s}': {any}\n", .{pargs.output, err});
+        zarc.panic("[ZArc] could not open file '{s}': {any}\n", .{pargs.output, err});
     };
     defer outputFile.close(); 
     
