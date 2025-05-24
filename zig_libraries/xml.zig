@@ -10,6 +10,10 @@ pub const NodeType = enum {
     Document,
 };
 
+fn log(comptime text: []const u8, args: anytype) void {
+    std.debug.print("[XML] "++text, args);
+}
+
 pub const Node = struct {
     node_type: NodeType,
     name: ?[]const u8,
@@ -109,27 +113,27 @@ pub const Parser = struct {
         const document = try Node.init(self.allocator, .Document, null, null);
         errdefer document.deinit();
 
-        std.debug.print("Parsing XML document, input length: {d}\n", .{self.input.len});
+        log("Parsing XML document, input length: {d}\n", .{self.input.len});
         while (self.pos < self.input.len) {
             self.skipWhitespace();
             if (self.pos >= self.input.len) break;
 
             if (self.input[self.pos] == '<') {
                 if (self.pos + 1 < self.input.len and self.input[self.pos + 1] == '?') {
-                    std.debug.print("Skipping processing instruction at pos: {d}\n", .{self.pos});
+                    log("Skipping processing instruction at pos: {d}\n", .{self.pos});
                     self.skipProcessingInstruction();
                 } else if (self.pos + 1 < self.input.len and self.input[self.pos + 1] == '!') {
-                    std.debug.print("Skipping comment at pos: {d}\n", .{self.pos});
+                    log("Skipping comment at pos: {d}\n", .{self.pos});
                     self.skipComment();
                 } else {
-                    std.debug.print("Parsing element at pos: {d}\n", .{self.pos});
+                    log("Parsing element at pos: {d}\n", .{self.pos});
                     const node = try self.parseElement();
                     try document.appendChild(node);
-                    std.debug.print("Appended element: {s}\n", .{node.name orelse "unnamed"});
+                    log("Appended element: {s}\n", .{node.name orelse "unnamed"});
                 }
             }
         }
-        std.debug.print("Finished parsing, document has {d} children\n", .{document.children.items.len});
+        log("Finished parsing, document has {d} children\n", .{document.children.items.len});
         return document;
     }
 
@@ -148,7 +152,7 @@ pub const Parser = struct {
         if (self.pos + 1 < self.input.len and self.input[self.pos] == '?' and self.input[self.pos + 1] == '>') {
             self.pos += 2;
         } else {
-            std.debug.print("Invalid processing instruction at pos: {d}\n", .{self.pos});
+            log("Invalid processing instruction at pos: {d}\n", .{self.pos});
         }
     }
 
@@ -166,13 +170,13 @@ pub const Parser = struct {
             self.input[self.pos + 2] == '>') {
             self.pos += 3;
         } else {
-            std.debug.print("Invalid comment at pos: {d}\n", .{self.pos});
+            log("Invalid comment at pos: {d}\n", .{self.pos});
         }
     }
 
     fn parseElement(self: *Parser) !*Node {
         if (self.pos >= self.input.len or self.input[self.pos] != '<') {
-            std.debug.print("Invalid XML: Expected '<' at pos: {d}\n", .{self.pos});
+            log("Invalid XML: Expected '<' at pos: {d}\n", .{self.pos});
             return error.InvalidXml;
         }
         self.pos += 1;
@@ -185,11 +189,11 @@ pub const Parser = struct {
         }
         const name = self.input[name_start..self.pos];
         if (name.len == 0) {
-            std.debug.print("Invalid XML: Empty tag name at pos: {d}\n", .{name_start});
+            log("Invalid XML: Empty tag name at pos: {d}\n", .{name_start});
             return error.InvalidXml;
         }
 
-        std.debug.print("Parsing element: {s}\n", .{name});
+        log("Parsing element: {s}\n", .{name});
         const element = try Node.init(self.allocator, .Element, name, null);
         errdefer element.deinit();
 
@@ -208,19 +212,19 @@ pub const Parser = struct {
             }
             const attr_name = self.input[attr_name_start..self.pos];
             if (attr_name.len == 0) {
-                std.debug.print("Invalid XML: Empty attribute name at pos: {d}\n", .{attr_name_start});
+                log("Invalid XML: Empty attribute name at pos: {d}\n", .{attr_name_start});
                 return error.InvalidXml;
             }
 
             self.skipWhitespace();
             if (self.pos >= self.input.len or self.input[self.pos] != '=') {
-                std.debug.print("Invalid XML: Expected '=' after attribute {s} at pos: {d}\n", .{attr_name, self.pos});
+                log("Invalid XML: Expected '=' after attribute {s} at pos: {d}\n", .{attr_name, self.pos});
                 return error.InvalidXml;
             }
             self.pos += 1;
             self.skipWhitespace();
             if (self.pos >= self.input.len or self.input[self.pos] != '"') {
-                std.debug.print("Invalid XML: Expected '\"' for attribute value at pos: {d}\n", .{self.pos});
+                log("Invalid XML: Expected '\"' for attribute value at pos: {d}\n", .{self.pos});
                 return error.InvalidXml;
             }
             self.pos += 1;
@@ -230,33 +234,33 @@ pub const Parser = struct {
                 self.pos += 1;
             }
             if (self.pos >= self.input.len) {
-                std.debug.print("Invalid XML: Unclosed attribute value at pos: {d}\n", .{attr_value_start});
+                log("Invalid XML: Unclosed attribute value at pos: {d}\n", .{attr_value_start});
                 return error.InvalidXml;
             }
             const attr_value = self.input[attr_value_start..self.pos];
             self.pos += 1;
 
-            std.debug.print("Parsed attribute: {s}=\"{s}\"\n", .{attr_name, attr_value});
+            log("Parsed attribute: {s}=\"{s}\"\n", .{attr_name, attr_value});
             try element.setAttribute(attr_name, attr_value);
         }
 
         if (self.pos >= self.input.len) {
-            std.debug.print("Invalid XML: Unexpected end of input in element {s}\n", .{name});
+            log("Invalid XML: Unexpected end of input in element {s}\n", .{name});
             return error.InvalidXml;
         }
 
         if (self.input[self.pos] == '/') {
             if (self.pos + 1 >= self.input.len or self.input[self.pos + 1] != '>') {
-                std.debug.print("Invalid XML: Invalid self-closing tag {s} at pos: {d}\n", .{name, self.pos});
+                log("Invalid XML: Invalid self-closing tag {s} at pos: {d}\n", .{name, self.pos});
                 return error.InvalidXml;
             }
             self.pos += 2;
-            std.debug.print("Parsed self-closing element: {s}\n", .{name});
+            log("Parsed self-closing element: {s}\n", .{name});
             return element;
         }
 
         if (self.input[self.pos] != '>') {
-            std.debug.print("Invalid XML: Expected '>' after element {s} at pos: {d}\n", .{name, self.pos});
+            log("Invalid XML: Expected '>' after element {s} at pos: {d}\n", .{name, self.pos});
             return error.InvalidXml;
         }
         self.pos += 1;
@@ -264,7 +268,7 @@ pub const Parser = struct {
         while (self.pos < self.input.len) {
             self.skipWhitespace();
             if (self.pos >= self.input.len) {
-                std.debug.print("Invalid XML: Unexpected end of input in element {s}\n", .{name});
+                log("Invalid XML: Unexpected end of input in element {s}\n", .{name});
                 return error.InvalidXml;
             }
 
@@ -276,22 +280,22 @@ pub const Parser = struct {
                 }
                 const end_tag = self.input[end_tag_start..self.pos];
                 if (!std.mem.eql(u8, end_tag, name)) {
-                    std.debug.print("Invalid XML: Mismatched closing tag, expected {s}, got {s}\n", .{name, end_tag});
+                    log("Invalid XML: Mismatched closing tag, expected {s}, got {s}\n", .{name, end_tag});
                     return error.InvalidXml;
                 }
                 if (self.pos >= self.input.len) {
-                    std.debug.print("Invalid XML: Missing '>' for closing tag {s}\n", .{name});
+                    log("Invalid XML: Missing '>' for closing tag {s}\n", .{name});
                     return error.InvalidXml;
                 }
                 self.pos += 1;
                 break;
             } else if (self.input[self.pos] == '<' and self.pos + 1 < self.input.len and self.input[self.pos + 1] == '!') {
-                std.debug.print("Skipping comment in element {s}\n", .{name});
+                log("Skipping comment in element {s}\n", .{name});
                 self.skipComment();
             } else if (self.input[self.pos] == '<') {
                 const child = try self.parseElement();
                 try element.appendChild(child);
-                std.debug.print("Appended child element: {s} to {s}\n", .{child.name orelse "unnamed", name});
+                log("Appended child element: {s} to {s}\n", .{child.name orelse "unnamed", name});
             } else {
                 const text_start = self.pos;
                 while (self.pos < self.input.len and self.input[self.pos] != '<') {
@@ -301,7 +305,7 @@ pub const Parser = struct {
                 if (text.len > 0) {
                     const text_node = try Node.init(self.allocator, .Text, null, text);
                     try element.appendChild(text_node);
-                    std.debug.print("Appended text node: {s} to {s}\n", .{text, name});
+                    log("Appended text node: {s} to {s}\n", .{text, name});
                 }
             }
         }
