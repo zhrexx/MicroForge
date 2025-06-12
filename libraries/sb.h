@@ -49,17 +49,21 @@ char sb_pop(StringBuilder *sb) {
 }
 
 // @return NULL if errors
-void *sb_append_str(StringBuilder *sb, const char *str) {
-    if (!str) return 0;
-    sb_resize(sb, sb->capacity + strlen(str));
-    return memcpy(sb->data + sb->size, str, strlen(str));
+void sb_append_str(StringBuilder *sb, const char *str) {
+    if (!str) return;
+    size_t str_len = strlen(str);
+    if (sb->size + str_len >= sb->capacity) {
+        sb_resize(sb, sb->size + str_len + 1);
+    }
+    memcpy(sb->data + sb->size, str, str_len);
+    sb->size += str_len;
 }
 
 int sb_remove(StringBuilder *sb, size_t chars) {
     if (chars > sb->size) {
         chars = sb->size;
     }
-    
+
     for (size_t i = 0; i < chars; i++) {
         sb_pop(sb);
     }
@@ -67,12 +71,9 @@ int sb_remove(StringBuilder *sb, size_t chars) {
 }
 
 char *sb_to_cstr(StringBuilder *sb) {
-    char *str = malloc(sb->size+1);
-    size_t str_cur = 0;
-    for (size_t i = 0; i < sb->size; i++) {
-        str[str_cur++] = sb_pop(sb);
-    }
-    str[str_cur] = '\0';
+    char *str = malloc(sb->size + 1);
+    memcpy(str, sb->data, sb->size);
+    str[sb->size] = '\0';
     return str;
 }
 
