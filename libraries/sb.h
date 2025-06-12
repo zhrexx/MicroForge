@@ -48,14 +48,11 @@ char sb_pop(StringBuilder *sb) {
     return sb->data[--sb->size];
 }
 
-int sb_append_str(StringBuilder *sb, const char *str) {
+// @return NULL if errors
+void *sb_append_str(StringBuilder *sb, const char *str) {
     if (!str) return 0;
-    size_t previous_size = sb->size;
-    size_t len = strlen(str);
-    for (size_t i = 0; i < len; i++) {
-        sb_append(sb, str[i]);
-    }
-    return sb->size - previous_size;
+    sb_resize(sb, sb->capacity + strlen(str));
+    return memcpy(sb->data + sb->size, str, strlen(str));
 }
 
 int sb_remove(StringBuilder *sb, size_t chars) {
