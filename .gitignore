@@ -1,1 +1,24 @@
 .idea
+
+# Build artifacts
+build_status
+cal
+cat
+cp
+example
+fid
+http
+iofg
+ls
+me
+menv
+program_runner
+rm
+upper
+xar
+
+# Library test executables
+libraries/hmap_test
+libraries/hmap_example
+libraries/integration_example
+libraries/full_integration_test
