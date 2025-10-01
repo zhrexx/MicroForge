@@ -1,70 +1,19 @@
 // standalone means its header-only library version
 
-// Why XVec looks like my vector.h 
+// Why XVec looks like my vector.h
 // the code base is shared but this appoch is more user-friendly and modern (Using Word instead of void *)
 // i hope you will like it
 #ifndef XVEC_H
 #define XVEC_H
 
-// TODOS: 
+// TODOS:
 // Maybe add WSTRING (cuz of xvec_to_string)
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
+#include "word.h"
 
-typedef enum {
-    WINT,
-    WFLOAT,
-    WPOINTER,
-    WCHAR_,
-} WordType;
-
-typedef struct {
-    WordType type; 
-    union {
-        void *as_pointer;
-        int as_int;
-        float as_float;
-        char as_char;
-    };
-} Word;
-
-Word word_int(int value) {
-    Word word;
-    word.type = WINT;
-    word.as_int = value;
-    return word;
-}
-
-Word word_float(float value) {
-    Word word;
-    word.type = WFLOAT;
-    word.as_float = value;
-    return word;
-}
-
-Word word_pointer(void *value) {
-    Word word;
-    word.type = WPOINTER;
-    word.as_pointer = value;
-    return word;
-}
-
-Word word_char(char value) {
-    Word word;
-    word.type = WCHAR_;
-    word.as_char = value;
-    return word;
-}
-
-Word word_string(const char *value) {
-    Word word;
-    word.type = WPOINTER;
-    word.as_pointer = strdup(value);
-    return word;
-}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -94,7 +43,7 @@ void xvec_free(XVec *vector) {
             free(vector->data[i].as_pointer);
         }
     }
-    
+
     free(vector->data);
     vector->data = NULL;
     vector->size = 0;
@@ -102,7 +51,7 @@ void xvec_free(XVec *vector) {
 }
 
 ///////////////////////////////////////
-/// User API 
+/// User API
 ///////////////////////////////////////
 
 XVec xvec_create(size_t initial_capacity) {
@@ -163,7 +112,7 @@ void xvec_remove(XVec *vector, size_t index) {
         fprintf(stderr, "Index out of bounds\n");
         exit(EXIT_FAILURE);
     }
-    
+
     for (size_t i = index; i < vector->size - 1; i++) {
         vector->data[i] = vector->data[i + 1];
     }
@@ -177,11 +126,11 @@ void xvec_remove(XVec *vector, size_t index) {
 ssize_t xvec_find(XVec *vector, Word value) {
     for (size_t i = 0; i < vector->size; i++) {
         Word current = vector->data[i];
-        
+
         if (current.type != value.type) {
             continue;
         }
-        
+
         switch (current.type) {
             case WINT:
                 if (current.as_int == value.as_int) return i;
@@ -203,11 +152,11 @@ ssize_t xvec_find(XVec *vector, Word value) {
 bool xvec_contains(XVec *vector, Word value) {
     for (size_t i = 0; i < vector->size; i++) {
         Word current = vector->data[i];
-        
+
         if (current.type != value.type) {
             continue;
         }
-        
+
         switch (current.type) {
             case WINT:
                 if (current.as_int == value.as_int) return true;
@@ -264,7 +213,7 @@ char *xvec_to_string(XVec *vector, const char *separator) {
 
     size_t total_length = 0;
     size_t sep_len = strlen(separator);
-    
+
     for (size_t i = 0; i < vector->size; i++) {
         if (vector->data[i].type != WPOINTER) {
             fprintf(stderr, "Cannot convert non-string elements to string\n");
@@ -300,7 +249,7 @@ char *xvec_to_string(XVec *vector, const char *separator) {
 XVec parse_pargs(int argc, char **argv) {
     XVec pargs_vector;
     xvec_init(&pargs_vector, argc);
-    
+
     for (int i = 0; i < argc; i++) {
         Word word;
         word.type = WPOINTER;
@@ -315,12 +264,12 @@ XVec split_to_vector(const char* src, const char* delimiter) {
     char* src_copy = strdup(src);
     XVec result;
     xvec_init(&result, 10);
-    
+
     int in_quote = 0;
     char* start = src_copy;
     char* current = src_copy;
     int delimiter_len = strlen(delimiter);
-    
+
     while (*current) {
         if (*current == '"') {
             in_quote = !in_quote;
@@ -337,14 +286,14 @@ XVec split_to_vector(const char* src, const char* delimiter) {
         }
         current++;
     }
-    
+
     if (start != current) {
         Word word;
         word.type = WPOINTER;
         word.as_pointer = strdup(start);
         xvec_push(&result, word);
     }
-    
+
     free(src_copy);
     return result;
 }
