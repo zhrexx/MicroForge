@@ -14,6 +14,7 @@ typedef enum {
 
 typedef struct {
     WordType type;
+    bool owns_memory;
     union {
         void *as_pointer;
         int as_int;
@@ -48,6 +49,7 @@ static inline Word word_pointer(void *value) {
     Word word;
     word.type = WPOINTER;
     word.as_pointer = value;
+    word.owns_memory = false;
     return word;
 }
 
@@ -62,6 +64,7 @@ static inline Word word_string(const char *value) {
     Word word;
     word.type = WPOINTER;
     word.as_pointer = (void*)strdup(value);
+    word.owns_memory = true;
     return word;
 }
 
