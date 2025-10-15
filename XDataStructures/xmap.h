@@ -38,7 +38,7 @@ void xmap_init(XMap *m, size_t initial_capacity) {
 
 void xmap_free(XMap *m) {
     for (size_t i = 0; i < m->size; i++) {
-        if (m->entries[i].value.type == WPOINTER && m->entries[i].value.owns_memory && m->entries[i].value.as_pointer != NULL) {
+        if (m->entries[i].value.type == WPOINTER && word_is_string(&m->entries[i].value) && m->entries[i].value.as_pointer != NULL) {
             free(m->entries[i].value.as_pointer);
         }
     }
@@ -73,7 +73,7 @@ void xmap_resize(XMap *m, size_t new_capacity) {
 void xmap_set(XMap *m, const char *key, Word value) {
     for (size_t i = 0; i < m->size; i++) {
         if (strcmp(m->entries[i].key, key) == 0) {
-            if (m->entries[i].value.type == WPOINTER && m->entries[i].value.owns_memory && m->entries[i].value.as_pointer != NULL) {
+            if (m->entries[i].value.type == WPOINTER && word_is_string(&m->entries[i].value) && m->entries[i].value.as_pointer != NULL) {
                 free(m->entries[i].value.as_pointer);
             }
             m->entries[i].value = value;

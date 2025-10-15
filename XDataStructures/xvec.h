@@ -39,7 +39,7 @@ void xvec_init(XVec *vector, size_t initial_capacity) {
 
 void xvec_free(XVec *vector) {
     for (size_t i = 0; i < vector->size; i++) {
-        if (vector->data[i].type == WPOINTER && vector->data[i].owns_memory &&
+        if (vector->data[i].type == WPOINTER && word_is_string(&vector->data[i]) &&
             vector->data[i].as_pointer != NULL) {
             free(vector->data[i].as_pointer);
         }
